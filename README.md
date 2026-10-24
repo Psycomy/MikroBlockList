@@ -70,7 +70,7 @@ Two families (IPv4, optional IPv6) times two variants (`full`, `lite`).
 ## Requirements
 
 - **RouterOS v7.21 or newer** (v6 is not supported). 7.21 is the first release whose built-in
-  certificate trust store can be enabled for `fetch` (per the changelog); tested on **CHR 7.24.5**.
+  certificate trust store can be enabled for `fetch` (per the changelog); tested on **CHR 7.24.5 and 7.25**.
 - Interface lists named **`WAN`** (your Internet interface) and **`LAN`** (your local interfaces).
   The default home configuration already has them; the installer stops without changing anything
   if they are missing.
@@ -501,7 +501,7 @@ ver [`docs/source-study-2026-10-20.md`](docs/source-study-2026-10-20.md). La all
 repositorio excluye siempre el rango de descarga de GitHub y los DNS públicos, y el build resta además los rangos de
 Cloudflare, Fastly y CloudFront de forma automática (ver [Allowlist automática de CDN](#allowlist-automática-de-cdn)).
 
-**Requisitos:** RouterOS **7.21 o superior** (probado en CHR 7.24.5), listas de interfaces **`WAN`**
+**Requisitos:** RouterOS **7.21 o superior** (probado en CHR 7.24.5 y 7.25), listas de interfaces **`WAN`**
 y **`LAN`**, y algo de RAM libre: medido en un CHR de 256 MiB con una lista de 40k entradas, unos 36,7 MiB
 libres con una lista y nunca menos de 30,5 MiB durante una actualización (dos listas unos 25 segundos).
 
