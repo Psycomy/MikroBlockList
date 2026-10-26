@@ -177,14 +177,21 @@ export function formatWhen(date) {
 }
 
 // The footer lines are lists of .fl items; CSS puts a "·" before each one but the first.
-// An item that starts a wrapped line gets class "ls", which drops its "·" (read in order:
-// dropping one can pull the next item up).
+// An item that starts a wrapped line gets class "ls", which drops its "·". If the narrower
+// item then fits back at the end of the line above (it would be glued to the item before it),
+// it gets "ls-keep" instead: the "·" stays invisible but keeps its width, so the item stays
+// at the start of its line. One pass in order (each item is read after the ones before it
+// are settled), so the result is stable and only depends on the width.
+const lineStart = (items, i) => items[i].offsetTop > items[i - 1].offsetTop + 2;
+
 function markLineStarts() {
   for (const list of document.querySelectorAll('.fl-list')) {
     const items = [...list.children];
-    for (const item of items) item.classList.remove('ls');
+    for (const item of items) item.classList.remove('ls', 'ls-keep');
     for (let i = 1; i < items.length; i++) {
-      if (items[i].offsetTop > items[i - 1].offsetTop + 2) items[i].classList.add('ls');
+      if (!lineStart(items, i)) continue;
+      items[i].classList.add('ls');
+      if (!lineStart(items, i)) items[i].classList.replace('ls', 'ls-keep');
     }
   }
 }
@@ -222,11 +229,18 @@ function renderFooter() {
   markLineStarts();
 }
 
-if (typeof ResizeObserver === 'function') {
-  new ResizeObserver(() => markLineStarts()).observe(document.querySelector('.foot'));
-} else {
-  window.addEventListener('resize', markLineStarts);
+// Re-mark when the footer width changes (window resize, or a ResizeObserver for anything
+// else); the height changes that markLineStarts itself causes are ignored.
+const foot = document.querySelector('.foot');
+let footWidth = -1;
+function footResized() {
+  const width = foot.clientWidth;
+  if (width === footWidth) return;
+  footWidth = width;
+  markLineStarts();
 }
+window.addEventListener('resize', footResized);
+if (typeof ResizeObserver === 'function') new ResizeObserver(footResized).observe(foot);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(markLineStarts);
 
 // --- ticker: one random listed entry every ~1.5 s ---

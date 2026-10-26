@@ -1,7 +1,8 @@
 // The background "threat map": a world of twinkling cyan dots (world-atlas land-110m on a
 // cover-fit equirectangular grid), red comets between random land points, cyan ripples where
 // they land, and scan waves. Landscape screens show the whole world; portrait ones (phones)
-// a cover-fit window on Europe and Africa, so the dots still read as continents. Uses the d3 and topojson globals (vendored, classic scripts).
+// a cover-fit window on Europe and Africa, so the dots still read as continents. Uses the d3
+// and topojson globals (vendored, classic scripts).
 //
 // All coordinates in the API are CSS pixels (client coordinates).
 

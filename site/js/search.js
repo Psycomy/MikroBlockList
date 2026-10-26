@@ -264,17 +264,26 @@ function setSearched(on) {
 }
 
 // A new card that is not fully on screen scrolls into view (instantly with reduced motion);
-// one taller than the screen scrolls to its top, the verdict.
+// one taller than the screen scrolls to its top, the verdict. Measured once its pop-in
+// animation has ended (a timer too, in case no animationend comes), against the visual
+// viewport (what is on screen with a phone's address bar or keyboard).
 function reveal(card) {
-  requestAnimationFrame(() => {
-    if (!card.isConnected) return;
+  let done = false;
+  const go = () => {
+    if (done || !card.isConnected) return;
+    done = true;
+    const view = window.visualViewport;
+    const top = view ? view.offsetTop : 0;
+    const height = view ? view.height : window.innerHeight;
     const b = card.getBoundingClientRect();
-    if (b.top >= 0 && b.bottom <= window.innerHeight) return;
+    if (b.top >= top && b.bottom <= top + height) return;
     card.scrollIntoView({
       behavior: map.reduced ? 'auto' : 'smooth',
-      block: b.height > window.innerHeight ? 'start' : 'nearest',
+      block: b.height > height ? 'start' : 'nearest',
     });
-  });
+  };
+  card.addEventListener('animationend', go, { once: true });
+  setTimeout(go, 450);
 }
 
 /** Draw `last`; `fresh` when it is a new search result (not a language redraw). */

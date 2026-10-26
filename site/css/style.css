@@ -172,7 +172,7 @@ form.scanning ~ .bar { opacity: 1; }
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   animation: pop .35s ease-out;
   overflow-wrap: anywhere;
-  scroll-margin: 12px;
+  scroll-margin: 52px 12px 12px; /* the top one clears the ES/EN switcher */
 }
 @keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
 .card.bad { border: 1px solid var(--red); box-shadow: 0 0 40px rgba(255, 56, 96, .35); }
@@ -332,6 +332,7 @@ dialog.sources::backdrop { background: rgba(0, 4, 10, .7); }
 .foot-counts .fl + .fl::before { content: '· '; }
 .foot-links .fl + .fl::before { content: '·'; margin: 0 6px; }
 .fl-list > .fl.ls::before { content: none; }
+.fl-list > .fl.ls-keep::before { visibility: hidden; }
 
 @media (max-width: 699.98px) {
   .ticker { display: none; }
