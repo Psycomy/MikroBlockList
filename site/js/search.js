@@ -2,7 +2,7 @@
 // page (it loads app.js, which wires everything else).
 import { parseQuery, search, countryKind, reportUrl, formatCount, resultTone } from './core.js';
 import {
-  els, map, index, centroids, onSearch, showIdleStatus, dataStatus, formatWhen,
+  els, map, index, centroids, onSearch, showIdleStatus, dataStatus, formatWhen, compact,
 } from './app.js';
 import { t, lang, countryText } from './i18n.js';
 import { externalLink, badge } from './sources.js';
@@ -69,7 +69,7 @@ function countUp(token) {
   const t0 = performance.now();
   const paint = (k) => {
     bar.style.width = `${k * 100}%`;
-    setLine(t('scanning', {
+    setLine(t(compact.matches ? 'scanning_short' : 'scanning', {
       n: formatCount(Math.floor(k * total), lang()), total: formatCount(total, lang()), s,
     }));
   };
@@ -257,18 +257,47 @@ function unavailableCard(text) {
   return card;
 }
 
-function render() {
+// Narrow screens hide the help paragraph while a card is shown (CSS: body.searched), until the
+// box is cleared or the query is invalid.
+function setSearched(on) {
+  document.body.classList.toggle('searched', on);
+}
+
+// A new card that is not fully on screen scrolls into view (instantly with reduced motion);
+// one taller than the screen scrolls to its top, the verdict.
+function reveal(card) {
+  requestAnimationFrame(() => {
+    if (!card.isConnected) return;
+    const b = card.getBoundingClientRect();
+    if (b.top >= 0 && b.bottom <= window.innerHeight) return;
+    card.scrollIntoView({
+      behavior: map.reduced ? 'auto' : 'smooth',
+      block: b.height > window.innerHeight ? 'start' : 'nearest',
+    });
+  });
+}
+
+/** Draw `last`; `fresh` when it is a new search result (not a language redraw). */
+function render(fresh = false) {
   if (!last) { els.r.replaceChildren(); return; }
+  let card = null;
   if (last.kind === 'invalid') {
     els.r.replaceChildren();
+    setSearched(false);
     setLine(t('invalid'), 'bad');
   } else if (last.kind === 'unavailable') {
-    els.r.replaceChildren(unavailableCard(last.text));
+    card = unavailableCard(last.text);
+    els.r.replaceChildren(card);
     showIdleStatus();
   } else {
     const { query, result } = last;
-    els.r.replaceChildren(resultCard(query, result));
+    card = resultCard(query, result);
+    els.r.replaceChildren(card);
     setLine(t(STATUS_KEY[result.state]), resultTone(result));
+  }
+  if (card && fresh) {
+    setSearched(true);
+    reveal(card);
   }
 }
 
@@ -303,7 +332,7 @@ export async function runSearch(text) {
   if (data !== 'ready') {
     stopScan();
     last = { kind: 'unavailable', text: query.text, raw: text };
-    render();
+    render(true);
     return;
   }
   if (animate) {
@@ -314,7 +343,7 @@ export async function runSearch(text) {
 
   const result = search(index, query, new Date());
   const tone = resultTone(result);
-  if (!animate) { last = { kind: 'result', query, result }; render(); return; }
+  if (!animate) { last = { kind: 'result', query, result }; render(true); return; }
 
   flight = result;
   setLine(t(STATUS_KEY[result.state]), tone);
@@ -330,10 +359,12 @@ export async function runSearch(text) {
   }
   flight = null;
   last = { kind: 'result', query, result };
-  render();
+  render(true);
 }
 
 onSearch(runSearch);
+
+els.q.addEventListener('input', () => { if (!els.q.value.trim()) setSearched(false); });
 
 // redraw the card in the new language (app.js has just reset the status line)
 document.addEventListener('langchange', () => {
