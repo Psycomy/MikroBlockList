@@ -684,11 +684,11 @@ class RouterOsTest(unittest.TestCase):
     def test_07h_lock_released_after_install_error(self):
         # an installer whose step 5 fails (a placeholder that is not in mbl-update)
         installer = (ROUTEROS / "install.rsc").read_text()
-        good = '$mblInject "@MBL_IPV6@" $mblV6'
+        good = ':set mblSrc [$mblInject $mblSrc "@MBL_IPV6@" $mblV6]'
         self.assertIn(good, installer)
         with tempfile.TemporaryDirectory() as d:
             broken = Path(d) / "install.rsc"
-            broken.write_text(installer.replace(good, '$mblInject "@MBL_NOPE@" $mblV6'))
+            broken.write_text(installer.replace(good, ':set mblSrc [$mblInject $mblSrc "@MBL_NOPE@" $mblV6]'))
             self.chr.upload(broken, "install.rsc")
         active, n = self.active_list(), self.count(self.active_list())
         try:

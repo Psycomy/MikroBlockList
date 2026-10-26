@@ -293,3 +293,35 @@ El objetivo era ≤ 5 min con ~39k entradas: se cumple con mucho margen y no hiz
 2. Descarga `https://download.mikrotik.com/routeros/<ver>/chr-<ver>.img.zip` y calcula `sha256sum`.
 3. Escribe `<ver> <sha256>` en `tests/e2e/chr-version.txt`.
 4. Lanza el workflow (`workflow_dispatch`) en la rama y comprueba que queda en verde.
+
+## 8. Hardware real: RB2011UiAS (2026-10-26)
+
+Primer dispositivo físico. **RB2011UiAS**: MIPS 74Kc a 600 MHz (`mipsbe`), 128 MiB de RAM, 128 MiB
+de NAND como almacenamiento raíz (no hay carpeta `flash/`), RouterOS **7.25**. Era un router con
+configuración real previa (VLANs, 12 reglas de filtro, fasttrack, IPv6 activo); se guardó un
+`/export` antes de empezar.
+
+| Prueba | Resultado |
+|---|---|
+| Instalación `full` desde GitHub (34.384 entradas) | OK en 333 s. Reglas `MBL:` arriba, antes de la regla dinámica del fasttrack. ~15 MiB de RAM |
+| Actualización diaria `full` | OK, pero **unos 18 min con la CPU al 100 %**: ~8 min cargando y ~10 min vaciando la lista antigua (un único `remove [find]`). Con las dos listas, ~27 MiB menos de RAM libre |
+| Pasar de `full` a `lite` | 331 s (casi todo es vaciar la lista `full`) |
+| Actualización diaria `lite` (2.400 entradas) | **41 s** |
+| IPv6 activado (`lite`, 87 entradas) | OK: 6 reglas en `/ipv6 firewall raw`, carga en ~7 s |
+| Contador | OK: 3 pings del propio router a una IP listada → `router-out 3 packets`; la siguiente actualización, 0 |
+| Modo prueba (`mblMode "log"`) | OK en IPv4 e IPv6 (`passthrough` / `log` con `MBL-OUT` y `MBL-ROUTER`), con el aviso en el log; vuelta a `block` sin huecos |
+| Reinicio | OK: vuelve en ~50 s; carga la copia local (`mbl-last.txt`, `mbl6-last.txt`) al arrancar y la lista nueva un minuto después; contador `since boot` |
+| Aviso de router pequeño (3.5.1) | OK: con `full` avisa al empezar, en el log y al terminar |
+| Ruido en el log (3.5.1) | Una instalación deja 2 copias del código del script en `system,info` en lugar de 7 |
+
+Conclusiones:
+
+- En routers de este tipo, **`lite`**. `full` funciona, pero una CPU al 100 % durante 18 minutos al
+  día afecta al tráfico que el router tenga que procesar fuera del fasttrack.
+- El **reloj** del router iba 5 días atrasado (los servidores NTP configurados no respondían). La
+  comprobación de lista antigua y la validación TLS dependen de la hora: conviene tener un NTP que
+  funcione (`/system ntp client set servers=pool.ntp.org`).
+- No se probó la ruta `flash/` (este modelo no la tiene) ni versiones 7.21-7.23 (el equipo está en
+  7.25 y bajar de versión no es una prueba inocua).
+- La suite e2e no se pasó contra este equipo: con 10.000 entradas por carga y decenas de cargas,
+  serían horas con la CPU al 100 %. Las pruebas de arriba cubren lo propio del hardware.

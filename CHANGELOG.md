@@ -5,7 +5,7 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). The version in use is in [`VERSION`](VERSION), and the
 published list carries it as `script=<version>` in its header.
 
-## [Unreleased]
+## [3.5.1] - 2026-10-26
 
 ### Added
 - Lookup page at <https://psycomy.github.io/MikroBlockList/>: search an IPv4, IPv6 or CIDR and see
@@ -16,9 +16,19 @@ published list carries it as `script=<version>` in its header.
 - A test that the false-positive issue form lists every enabled source.
 
 ### Changed
+- The installer warns (without stopping) when the `full` variant is installed on a small router:
+  MIPS, PowerPC or Tile CPU, or less than 200 MiB of RAM, and suggests `lite`. On an RB2011UiAS
+  (MIPS 600 MHz, 128 MiB) a daily full update kept the CPU at 100 % for about 18 minutes; lite took
+  41 seconds.
+- The installer writes the settings into the stored `mbl-update` with a single change instead of
+  six. RouterOS logs every change of a script's source in full, so an install now adds two copies
+  of the script to the system log instead of seven.
 - `NOTICE.md` has a "Notice" column with each source's copyright line (Spamhaus' copyright and
   date, as their DROP FAQ asks).
 - The false-positive form and the README link to the lookup page.
+
+### Tested
+- First run on physical hardware: RB2011UiAS with RouterOS 7.25 (see `docs/testing-chr.md`).
 
 ## [3.5.0] - 2026-10-22
 

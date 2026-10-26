@@ -34,7 +34,7 @@ class InstallerVersionTest(unittest.TestCase):
         self.assertEqual(body.count("@MBL_VERSION@"), 1)
 
     def test_installer_injects_version_placeholder(self):
-        self.assertIn('$mblInject "@MBL_VERSION@" $mblScriptVersion', INSTALLER.read_text())
+        self.assertIn(':set mblSrc [$mblInject $mblSrc "@MBL_VERSION@" $mblScriptVersion]', INSTALLER.read_text())
 
     def test_installer_has_variant_placeholder(self):
         body = _update_body(INSTALLER.read_text())
@@ -42,7 +42,7 @@ class InstallerVersionTest(unittest.TestCase):
         self.assertIn(':local variant "@MBL_VARIANT@"', body)
 
     def test_installer_injects_variant_placeholder(self):
-        self.assertIn('$mblInject "@MBL_VARIANT@" $mblVar', INSTALLER.read_text())
+        self.assertIn(':set mblSrc [$mblInject $mblSrc "@MBL_VARIANT@" $mblVar]', INSTALLER.read_text())
 
     def test_installer_has_url_placeholders(self):
         body = _update_body(INSTALLER.read_text())
@@ -51,8 +51,8 @@ class InstallerVersionTest(unittest.TestCase):
 
     def test_installer_injects_url_placeholders(self):
         text = INSTALLER.read_text()
-        self.assertIn('$mblInject "@MBL_URL@" $mblUrl', text)
-        self.assertIn('$mblInject "@MBL_URL6@" $mblUrl6', text)
+        self.assertIn(':set mblSrc [$mblInject $mblSrc "@MBL_URL@" $mblUrl]', text)
+        self.assertIn(':set mblSrc [$mblInject $mblSrc "@MBL_URL6@" $mblUrl6]', text)
 
     def test_installer_has_ipv6_placeholder(self):
         body = _update_body(INSTALLER.read_text())
@@ -60,7 +60,7 @@ class InstallerVersionTest(unittest.TestCase):
         self.assertIn(':local ipv6 "@MBL_IPV6@"', body)
 
     def test_installer_injects_ipv6_placeholder(self):
-        self.assertIn('$mblInject "@MBL_IPV6@" $mblV6', INSTALLER.read_text())
+        self.assertIn(':set mblSrc [$mblInject $mblSrc "@MBL_IPV6@" $mblV6]', INSTALLER.read_text())
 
     def test_installer_has_mode_placeholder(self):
         body = _update_body(INSTALLER.read_text())
@@ -70,7 +70,13 @@ class InstallerVersionTest(unittest.TestCase):
         self.assertEqual(body.count(':local mode "'), 1)
 
     def test_installer_injects_mode_placeholder(self):
-        self.assertIn('$mblInject "@MBL_MODE@" $mblMd', INSTALLER.read_text())
+        self.assertIn(':set mblSrc [$mblInject $mblSrc "@MBL_MODE@" $mblMd]', INSTALLER.read_text())
+
+    def test_installer_writes_source_once(self):
+        # RouterOS logs every change of a script source in full: the settings
+        # are injected into a string and written back with a single set.
+        text = INSTALLER.read_text()
+        self.assertEqual(text.count('/system script set [find where name="mbl-update"] source='), 1)
 
 
 if __name__ == "__main__":
