@@ -48,7 +48,9 @@ const rgbText = (rgb) => (Array.isArray(rgb) ? rgb.join(',') : String(rgb || CYA
 
 /**
  * Start the map on `canvas`. `opts.target()` returns the element big comets fly to (the
- * search box). Returns {comet, wave, project, reduced}.
+ * search box); `opts.occluders()` returns the page elements the comets, waves and pulses must
+ * pass behind (title, search box, texts, result card...). Returns {comet, wave, project,
+ * reduced}.
  */
 export function createMap(canvas, opts = {}) {
   const ctx = canvas.getContext('2d');
@@ -201,6 +203,10 @@ export function createMap(canvas, opts = {}) {
       ctx.drawImage(layers[g], 0, 0, w, h);
     }
     ctx.globalAlpha = 1;
+  }
+
+  // The dots a wave is crossing, brighter and bigger (drawn with the clipped effects).
+  function drawLitDots() {
     if (!waves.length) return;
     const band = 26 * d;
     for (const p of dots) {
@@ -295,6 +301,24 @@ export function createMap(canvas, opts = {}) {
     pulses = pulses.filter((p) => p.r < (p.big ? 220 : 22) * d);
   }
 
+  // The page text has no background, so a bright comet crossing it looks in front of it.
+  // Clip the moving effects to the canvas minus the boxes of the page elements (with a small
+  // margin): they pass behind the text and the search box. The dots stay everywhere.
+  const PAD = 8;
+  function clipOccluders() {
+    const els = opts.occluders ? opts.occluders() : [];
+    ctx.beginPath();
+    ctx.rect(0, 0, w, h);
+    for (const el of els) {
+      const b = el.getBoundingClientRect();
+      if (!b.width || !b.height) continue;
+      const x = (b.left - PAD) * d; const y = (b.top - PAD) * d;
+      const bw = (b.width + 2 * PAD) * d; const bh = (b.height + 2 * PAD) * d;
+      if (ctx.roundRect) ctx.roundRect(x, y, bw, bh, 12 * d); else ctx.rect(x, y, bw, bh);
+    }
+    ctx.clip('evenodd');
+  }
+
   function draw(now) {
     ctx.fillStyle = '#020812';
     ctx.fillRect(0, 0, w, h);
@@ -303,9 +327,13 @@ export function createMap(canvas, opts = {}) {
     waves = waves.filter((wv) => wv.r < diag);
     drawDots(now / 900);
     if (reduced) return;
+    ctx.save();
+    clipOccluders();
+    drawLitDots();
     drawWaves(diag);
     drawArcs();
     drawPulses();
+    ctx.restore();
   }
 
   function loop(now) {

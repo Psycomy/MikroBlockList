@@ -21,7 +21,12 @@ export const els = {
 };
 
 /** The map ({comet, wave, project, reduced}). */
-export const map = createMap($('map'), { target: () => els.q });
+// Elements the map's comets, waves and pulses pass behind (see createMap).
+const OCCLUDERS = 'main h1, main .tag, #f, .status-row, .help, .privacy, #r > *, .lang, .ticker, .foot';
+export const map = createMap($('map'), {
+  target: () => els.q,
+  occluders: () => document.querySelectorAll(OCCLUDERS),
+});
 
 /** The loaded index (null until ready); see buildIndex in core.js. */
 export let index = null;
