@@ -152,7 +152,7 @@
 :if ($mblVar = "full") do={
   :local arch [/system resource get architecture-name]
   :local mem [/system resource get total-memory]
-  :if (($arch ~ "^(mips|mmips|smips|ppc|tile)") || ($mem < (200 * 1024 * 1024))) do={
+  :if (($arch ~ "^(mips|mmips|smips|powerpc|ppc|tile)") || ($mem < (200 * 1024 * 1024))) do={
     :set mblSlow ("MBL: variant full on a small router (" . [/system resource get board-name] . ", " . $arch . ", " . ($mem / 1048576) . " MiB): each daily update may keep the CPU busy for many minutes. Consider lite: :global mblVariant \"lite\" and install again.")
     :put $mblSlow
     :log warning $mblSlow
@@ -965,6 +965,7 @@
   :if ([:len $mblSlow] > 0) do={ :put "MBL: small router: the lite variant is much lighter (see the warning above)." }
 } else={
   :put "MBL: WARNING installed (script $mblScriptVersion, variant $mblVar, ipv6 $mblV6, mode $mblMd), but the first load failed or was skipped. See /log print where message~\"MBL\""
+  :if ([:len $mblSlow] > 0) do={ :put "MBL: small router: the lite variant is much lighter (see the warning above)." }
   :log warning "MBL: installed (script $mblScriptVersion, variant $mblVar, ipv6 $mblV6, mode $mblMd), but the first load failed or was skipped"
 }
 }

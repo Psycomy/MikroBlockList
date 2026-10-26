@@ -412,7 +412,7 @@ On a small router the difference between the variants is large. Measured on an *
 | | full (34,384 entries) | lite (2,400 entries) |
 |---|---|---|
 | Daily update | about 18 min at 100 % CPU | 41 s |
-| Extra RAM while both lists coexist | about 27 MiB | about 2 MiB |
+| Extra RAM while both lists coexist | about 27 MiB | a few MiB |
 
 Use **lite** on MIPS, PowerPC or Tile routers and on anything with less than 200 MiB of RAM; the
 installer warns when it sees one of these with `full`.
