@@ -7,8 +7,8 @@ body:
     id: script
     attributes:
       label: Script version
-      description: "The final install message, e.g. `MBL: installed (script 3.5.0, variant full, ipv6 no, mode block)`."
-      placeholder: "MBL: installed (script 3.5.0, variant full, ipv6 no, mode block)"
+      description: "The final install message, e.g. `MBL: installed (script 3.5.1, variant full, ipv6 no, mode block)`."
+      placeholder: "MBL: installed (script 3.5.1, variant full, ipv6 no, mode block)"
     validations:
       required: true
   - type: input

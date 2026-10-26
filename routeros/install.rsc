@@ -45,7 +45,7 @@
 :local mblMinVersion "7.21"
 # Version of this installer and of the mbl-update it installs (= VERSION file).
 # mbl-update logs a warning when the published list says a newer one exists.
-:local mblScriptVersion "3.5.0"
+:local mblScriptVersion "3.5.1"
 
 # "7.21.3 (stable)" -> 7021 ; "7.19rc2" -> 7019
 :local mblVerNum do={
@@ -145,6 +145,19 @@
 :if ($mblVar = "") do={ :set mblVar "full" }
 :if ($mblV6 = "") do={ :set mblV6 "no" }
 :if ($mblMd = "") do={ :set mblMd "block" }
+# The full list on a small router: a warning only, the choice stays the
+# user's. Measured on an RB2011UiAS (MIPS 600 MHz, 128 MiB): a daily full
+# update kept the CPU at 100 % for about 18 minutes; lite took 41 seconds.
+:local mblSlow ""
+:if ($mblVar = "full") do={
+  :local arch [/system resource get architecture-name]
+  :local mem [/system resource get total-memory]
+  :if (($arch ~ "^(mips|mmips|smips|ppc|tile)") || ($mem < (200 * 1024 * 1024))) do={
+    :set mblSlow ("MBL: variant full on a small router (" . [/system resource get board-name] . ", " . $arch . ", " . ($mem / 1048576) . " MiB): each daily update may keep the CPU busy for many minutes. Consider lite: :global mblVariant \"lite\" and install again.")
+    :put $mblSlow
+    :log warning $mblSlow
+  }
+}
 # The router downloads a plain list (one address per line) and validates
 # every line as data; nothing downloaded is ever executed.
 :local mblUrl ($mblBase . "/routeros-" . $mblVar . ".txt")
@@ -827,20 +840,22 @@
 }
 }
 
-# Inject the settings into the stored script: replace placeholder $1 with $2.
+# Inject the settings into the stored script: in source $1, replace
+# placeholder $2 with $3. The source is edited as a string and written back
+# once, because RouterOS logs every change of a script's source in full.
 :local mblInject do={
-  :local src [/system script get [find where name="mbl-update"] source]
-  :local p [:find $src $1]
-  :if ([:typeof $p] = "nil") do={ :error "MBL: internal error, placeholder $1 not found in mbl-update" }
-  /system script set [find where name="mbl-update"] \
-    source=([:pick $src 0 $p] . $2 . [:pick $src ($p + [:len $1]) [:len $src]])
+  :local p [:find $1 $2]
+  :if ([:typeof $p] = "nil") do={ :error "MBL: internal error, placeholder $2 not found in mbl-update" }
+  :return ([:pick $1 0 $p] . $3 . [:pick $1 ($p + [:len $2]) [:len $1]])
 }
-$mblInject "@MBL_URL@" $mblUrl
-$mblInject "@MBL_URL6@" $mblUrl6
-$mblInject "@MBL_VERSION@" $mblScriptVersion
-$mblInject "@MBL_VARIANT@" $mblVar
-$mblInject "@MBL_IPV6@" $mblV6
-$mblInject "@MBL_MODE@" $mblMd
+:local mblSrc [/system script get [find where name="mbl-update"] source]
+:set mblSrc [$mblInject $mblSrc "@MBL_URL@" $mblUrl]
+:set mblSrc [$mblInject $mblSrc "@MBL_URL6@" $mblUrl6]
+:set mblSrc [$mblInject $mblSrc "@MBL_VERSION@" $mblScriptVersion]
+:set mblSrc [$mblInject $mblSrc "@MBL_VARIANT@" $mblVar]
+:set mblSrc [$mblInject $mblSrc "@MBL_IPV6@" $mblV6]
+:set mblSrc [$mblInject $mblSrc "@MBL_MODE@" $mblMd]
+/system script set [find where name="mbl-update"] source=$mblSrc
 
 # --------------------------------------------------------- 6. schedulers
 # Daily at a random time so routers do not all hit GitHub at once.
@@ -947,6 +962,7 @@ $mblInject "@MBL_MODE@" $mblMd
   :if (($mblV6 = "yes") && ($mblLastOk6 != true)) do={ :set note " - first ipv6 load failed, see log" }
   :put ("MBL: installed (script $mblScriptVersion, variant $mblVar, ipv6 $mblV6, mode " . $mblMd . $note . ")")
   :log info ("MBL: installed (script $mblScriptVersion, variant $mblVar, ipv6 $mblV6, mode " . $mblMd . $note . ")")
+  :if ([:len $mblSlow] > 0) do={ :put "MBL: small router: the lite variant is much lighter (see the warning above)." }
 } else={
   :put "MBL: WARNING installed (script $mblScriptVersion, variant $mblVar, ipv6 $mblV6, mode $mblMd), but the first load failed or was skipped. See /log print where message~\"MBL\""
   :log warning "MBL: installed (script $mblScriptVersion, variant $mblVar, ipv6 $mblV6, mode $mblMd), but the first load failed or was skipped"

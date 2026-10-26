@@ -87,7 +87,7 @@ Paste this into the RouterOS terminal (Winbox, WebFig or SSH):
 /tool fetch url="https://raw.githubusercontent.com/Psycomy/MikroBlockList/main/routeros/install.rsc" check-certificate=yes; /import install.rsc
 ```
 
-It prints `MBL: installed (script 3.5.0, variant full, ipv6 no, mode block)` when the first list is loaded (about 20 seconds). The installer is
+It prints `MBL: installed (script 3.5.1, variant full, ipv6 no, mode block)` when the first list is loaded (about 20 seconds). The installer is
 idempotent: run it again at any time to upgrade or repair; nothing is duplicated and your
 allowlist is kept.
 
@@ -112,7 +112,7 @@ of the one-liner (it combines with `mblVariant` and `mblIpv6`):
   stops the installer before it changes anything. The global lives until the router reboots, so set
   it explicitly (`"block"`, `"log"`, or `""` to keep what is installed) when you reinstall in the same
   session.
-- The final message tells you the mode: `MBL: installed (script 3.5.0, variant full, ipv6 no, mode log)`.
+- The final message tells you the mode: `MBL: installed (script 3.5.1, variant full, ipv6 no, mode log)`.
 
 ### Choose a variant: full or lite
 
@@ -133,7 +133,7 @@ To install `lite`, put `:global mblVariant "lite"; ` in front of the one-liner:
 - The global lives until the router reboots, so if you reinstall in the same session, set it
   explicitly (`"full"`, `"lite"`, or `""` to keep what is installed).
 - Any value other than `full` or `lite` stops the installer before it changes anything.
-- The final message tells you which one is installed: `MBL: installed (script 3.5.0, variant lite, ipv6 no, mode block)`.
+- The final message tells you which one is installed: `MBL: installed (script 3.5.1, variant lite, ipv6 no, mode block)`.
 - A downloaded list whose header says another variant is rejected (`bad header`).
 
 ### Optional IPv6
@@ -154,7 +154,7 @@ the one-liner (it combines with `:global mblVariant "lite"; `):
 - Any value other than `true` or `false` stops the installer before it changes anything.
 - The global lives until the router reboots, so set it explicitly (`true`, `false`, or `""` to keep
   what is installed) when you reinstall in the same session.
-- The final message tells you the state: `MBL: installed (script 3.5.0, variant full, ipv6 yes, mode block)`.
+- The final message tells you the state: `MBL: installed (script 3.5.1, variant full, ipv6 yes, mode block)`.
 - Add your own IPv6 exceptions the same way as for IPv4:
   `/ipv6 firewall address-list add list=mbl6-allow address=2001:db8::/32 comment="my office"`.
 - **Best effort:** IPv6 never blocks IPv4. If the IPv6 list fails its checks on the build, no IPv6
@@ -406,6 +406,17 @@ Measured on a CHR 7.24.5 with 1 vCPU and 256 MiB (2026-10-21): a full update of 
 takes about 25 s; free RAM is 36.7 MiB with one list loaded and at least 30.5 MiB while both lists
 coexist. Full test record: [docs/testing-chr.md](docs/testing-chr.md) (in Spanish).
 
+On a small router the difference between the variants is large. Measured on an **RB2011UiAS**
+(MIPS 600 MHz, 128 MiB, RouterOS 7.25, 2026-10-26):
+
+| | full (34,384 entries) | lite (2,400 entries) |
+|---|---|---|
+| Daily update | about 18 min at 100 % CPU | 41 s |
+| Extra RAM while both lists coexist | about 27 MiB | about 2 MiB |
+
+Use **lite** on MIPS, PowerPC or Tile routers and on anything with less than 200 MiB of RAM; the
+installer warns when it sees one of these with `full`.
+
 </details>
 
 <details>
@@ -516,7 +527,7 @@ la allowlist `mbl-allow` (con las IPs de administración actuales como `MBL: adm
 `mbl-update` y los schedulers `mbl-daily` (una vez al día, a hora aleatoria) y `mbl-boot` (recarga
 `mbl-last.txt` al arrancar). Además activa el componente `fetch` en el almacén de certificados
 integrado (`builtin-trust-store`). Se puede volver a ejecutar sin duplicar nada. Al terminar
-muestra `MBL: installed (script 3.5.0, variant full, ipv6 no, mode block)`.
+muestra `MBL: installed (script 3.5.1, variant full, ipv6 no, mode block)`.
 
 **Probar primero: modo solo log.** Para ver qué bloquearía la lista sin bloquear nada, pon
 `:global mblMode "log"; ` delante del comando de instalación (se combina con `mblVariant` y `mblIpv6`):
@@ -536,7 +547,7 @@ muestra `MBL: installed (script 3.5.0, variant full, ipv6 no, mode block)`.
 - La elección se conserva al reinstalar con `mblMode` vacía. Cualquier valor distinto de `block` o
   `log` detiene el instalador antes de cambiar nada. La global dura hasta que el router se reinicia;
   si reinstalas en la misma sesión, defínela de forma explícita (`"block"`, `"log"` o `""`).
-- El mensaje final indica el modo: `MBL: installed (script 3.5.0, variant full, ipv6 no, mode log)`.
+- El mensaje final indica el modo: `MBL: installed (script 3.5.1, variant full, ipv6 no, mode log)`.
 
 **Cómo funciona en el router:** descarga `routeros-<variante>.txt`, lo lee con `/file read` en trozos
 de 32 KiB y valida cada línea (IPv4 o CIDR con prefijo de 8 a 32); solo añade direcciones. Nunca
@@ -545,7 +556,10 @@ conteos, hay más de un 1 % de líneas inválidas o quedan menos de 1000 entrada
 carga y se conserva la lista activa. El log indica el motivo en `MBL: <fichero> rejected (<motivo>),
 active list kept`: `no header`, `bad header`, `no footer`, `header/footer mismatch`,
 `count mismatch`, `too many invalid lines (N)`, `too few entries (N)` o `read error`. Medido en un CHR 7.24.5 (1 vCPU, 256 MiB): 40.000 entradas
-en unos 25 s.
+en unos 25 s. En un **RB2011UiAS** (MIPS 600 MHz, 128 MiB, RouterOS 7.25) la actualización diaria
+de `full` (34.384 entradas) tarda unos 18 minutos con la CPU al 100 %, y la de `lite` (2.400), 41 s:
+en routers MIPS, PowerPC o Tile, o con menos de 200 MiB de RAM, usa `lite` (el instalador avisa si
+eliges `full` en uno de ellos).
 
 **Elegir variante (*full* o *lite*):** `full` es la de por defecto (37.803 entradas IPv4 el 2026-10-22).
 `lite` (2.353 entradas IPv4) usa solo Spamhaus DROP (y DROPv6 con IPv6 activado), DShield, Emerging Threats compromised,
@@ -563,7 +577,7 @@ poca RAM o si solo quieres bloquear C2 y los rangos de ataque más graves. Para 
 - La global dura hasta que el router se reinicia; si reinstalas en la misma sesión, defínela de forma
   explícita (`"full"`, `"lite"` o `""` para conservar lo instalado).
 - Cualquier valor distinto de `full` o `lite` detiene el instalador antes de cambiar nada.
-- El mensaje final indica la variante: `MBL: installed (script 3.5.0, variant lite, ipv6 no, mode block)`.
+- El mensaje final indica la variante: `MBL: installed (script 3.5.1, variant lite, ipv6 no, mode block)`.
 - Una lista descargada con otra `variant=` en la cabecera se rechaza (`bad header`).
 - Límites de publicación: `full` 5.000 a 150.000 entradas, `lite` 1.000 a 20.000; si falla cualquiera
   de las dos, no se publica nada. Tamaño mínimo del fichero en el router: 100.000 bytes (`full`) y
@@ -593,7 +607,7 @@ Viene **desactivado**. Para bloquear también atacantes IPv6, pon
 - Cualquier valor distinto de `true` o `false` detiene el instalador antes de cambiar nada.
 - La global dura hasta que el router se reinicia; si reinstalas en la misma sesión, defínela de forma
   explícita (`true`, `false` o `""` para conservar lo instalado).
-- El mensaje final indica el estado: `MBL: installed (script 3.5.0, variant full, ipv6 yes, mode block)`.
+- El mensaje final indica el estado: `MBL: installed (script 3.5.1, variant full, ipv6 yes, mode block)`.
 - Tus excepciones IPv6 van igual que las de IPv4:
   `/ipv6 firewall address-list add list=mbl6-allow address=2001:db8::/32 comment="mi oficina"`.
 - **Mejor esfuerzo:** IPv6 nunca bloquea IPv4. Si la lista IPv6 no pasa las comprobaciones en la
