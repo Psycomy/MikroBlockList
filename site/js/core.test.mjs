@@ -1,4 +1,4 @@
-// Tests for the lookup core: node --test site/js/
+// Tests for the lookup core: node --test site/js/*.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -290,9 +290,13 @@ test('maskCidr hides the host part of both families', () => {
   assert.equal(maskCidr('203.0.113.0/24'), '203.0.x.x');
   assert.equal(maskCidr('1.2.3.4/32'), '1.2.x.x');
   assert.equal(maskCidr('2a0e::/32'), '2a0e:xxxx::');
-  assert.equal(maskCidr('2001:470:1:332::8/128'), '2001:470:xxxx::');
-  assert.equal(maskCidr('::/0'), '0:xxxx::');
+  assert.equal(maskCidr('2001:470:1:332::8/128'), '2001:xxxx::');
+  assert.equal(maskCidr('::/0'), '::');
   assert.equal(maskCidr('2001:0:5::/48'), '2001:xxxx::');
+  assert.equal(maskCidr('2001:0:0:5::/64'), '2001:xxxx::');
+  assert.equal(maskCidr('2001::/16'), '2001:xxxx::');
+  assert.equal(maskCidr('0:0:5::/48'), '0:xxxx::');
+  assert.equal(maskCidr('2001:DB8::1/128'), '2001:xxxx::');
   assert.equal(maskCidr('nonsense'), '?');
   assert.equal(maskCidr(undefined), '?');
 });

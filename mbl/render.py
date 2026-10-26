@@ -56,7 +56,7 @@ def _notice(results: list[SourceResult], stamp: str) -> str:
         "",
         f"Build: {stamp}",
         "",
-        "| source | url | category | license / terms | variants | entries | entries6 | error | Notice |",
+        "| source | url | category | license / terms | variants | entries | entries6 | error | notice |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:

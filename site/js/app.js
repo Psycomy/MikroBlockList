@@ -5,6 +5,8 @@ import { t, lang, setLang, applyStrings, countryText, categoryName } from './i18
 
 const DEFAULT_DATA = 'https://raw.githubusercontent.com/Psycomy/MikroBlockList/lists/lookup.json';
 const NARROW = 700;
+/** Phone-width screens: the status line uses its short phrasings ('ready_short', ...). */
+export const compact = matchMedia('(max-width: 479.98px)');
 
 const $ = (id) => document.getElementById(id);
 
@@ -100,6 +102,11 @@ function setStatus(next) {
   document.dispatchEvent(new CustomEvent('datastatus', { detail: next }));
 }
 
+const readyVars = () => ({
+  n: formatCount(index.counts.v4 + index.counts.v6, lang()),
+  s: index.sourcesWithData,
+});
+
 function renderStatus() {
   const { st, retry } = els;
   st.setAttribute('aria-live', 'polite'); // loading, ready and error are announced here
@@ -109,12 +116,16 @@ function renderStatus() {
   if (status === 'loading') st.textContent = t('loading');
   else if (status === 'error') st.textContent = t('unavailable');
   else if (status === 'ready') {
-    st.textContent = t('ready', {
-      n: formatCount(index.counts.v4 + index.counts.v6, lang()),
-      s: index.sourcesWithData,
-    });
+    st.textContent = t(compact.matches ? 'ready_short' : 'ready', readyVars());
   }
 }
+
+// re-phrase the idle "ready" line when the screen crosses the compact width (rotation)
+compact.addEventListener('change', () => {
+  if (status !== 'ready') return;
+  const shown = els.st.textContent;
+  if (shown === t('ready', readyVars()) || shown === t('ready_short', readyVars())) renderStatus();
+});
 
 /** Set the idle status line; the search flow may overwrite #st freely and call this back. */
 export function showIdleStatus() {
@@ -165,12 +176,46 @@ export function formatWhen(date) {
   return `${text} UTC`;
 }
 
-function renderFooter() {
+// The footer lines are lists of .fl items; CSS puts a "·" before each one but the first.
+// An item that starts a wrapped line gets class "ls", which drops its "·". If the narrower
+// item then fits back at the end of the line above (it would be glued to the item before it),
+// it gets "ls-keep" instead: the "·" stays invisible but keeps its width, so the item stays
+// at the start of its line. One pass in order (each item is read after the ones before it
+// are settled), so the result is stable and only depends on the width.
+const lineStart = (items, i) => items[i].offsetTop > items[i - 1].offsetTop + 2;
+
+function markLineStarts() {
+  for (const list of document.querySelectorAll('.fl-list')) {
+    const items = [...list.children];
+    for (const item of items) item.classList.remove('ls', 'ls-keep');
+    for (let i = 1; i < items.length; i++) {
+      if (!lineStart(items, i)) continue;
+      items[i].classList.add('ls');
+      if (!lineStart(items, i)) items[i].classList.replace('ls', 'ls-keep');
+    }
+  }
+}
+
+// "a · b · c" as .fl items, space-separated like the original text
+function setCounts(text) {
   const counts = $('foot-counts');
+  const parts = text.split(' · ');
+  counts.replaceChildren();
+  parts.forEach((part, i) => {
+    if (i) counts.append(' ');
+    const item = document.createElement('span');
+    item.className = 'fl';
+    item.textContent = part;
+    counts.append(item);
+  });
+}
+
+function renderFooter() {
   const month = $('dbip-month');
   if (status !== 'ready') {
-    counts.textContent = t(status === 'error' ? 'foot_unavailable' : 'foot_loading');
+    setCounts(t(status === 'error' ? 'foot_unavailable' : 'foot_loading'));
     month.textContent = '';
+    markLineStarts();
     return;
   }
   const vars = {
@@ -179,9 +224,24 @@ function renderFooter() {
     when: formatWhen(index.generatedAt),
     s: index.sourcesWithData,
   };
-  counts.textContent = t(index.ipv6Published ? 'foot_counts' : 'foot_counts_no_v6', vars);
+  setCounts(t(index.ipv6Published ? 'foot_counts' : 'foot_counts_no_v6', vars));
   month.textContent = index.dbipMonth ? ` ${t('dbip_month', { month: index.dbipMonth })}` : '';
+  markLineStarts();
 }
+
+// Re-mark when the footer width changes (window resize, or a ResizeObserver for anything
+// else); the height changes that markLineStarts itself causes are ignored.
+const foot = document.querySelector('.foot');
+let footWidth = -1;
+function footResized() {
+  const width = foot.clientWidth;
+  if (width === footWidth) return;
+  footWidth = width;
+  markLineStarts();
+}
+window.addEventListener('resize', footResized);
+if (typeof ResizeObserver === 'function') new ResizeObserver(footResized).observe(foot);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(markLineStarts);
 
 // --- ticker: one random listed entry every ~1.5 s ---
 const TICK_MS = 1500;

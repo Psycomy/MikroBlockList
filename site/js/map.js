@@ -1,6 +1,8 @@
 // The background "threat map": a world of twinkling cyan dots (world-atlas land-110m on a
 // cover-fit equirectangular grid), red comets between random land points, cyan ripples where
-// they land, and scan waves. Uses the d3 and topojson globals (vendored, classic scripts).
+// they land, and scan waves. Landscape screens show the whole world; portrait ones (phones)
+// a cover-fit window on Europe and Africa, so the dots still read as continents. Uses the d3
+// and topojson globals (vendored, classic scripts).
 //
 // All coordinates in the API are CSS pixels (client coordinates).
 
@@ -9,6 +11,10 @@ const MW = 720;
 const MH = 276;
 const LAT0 = 80;
 const LATS = 138;
+// Portrait view window (degrees): Europe + Africa, cover-fit. Its aspect is about a phone's,
+// which then shows all of it with the search box over the Mediterranean; a wider portrait
+// screen crops it, keeping `focus` [lon, lat] as central as the window allows.
+const PORTRAIT = { lon0: -14, lon1: 50, lat0: 78, lat1: -61, focus: [18, 22] };
 const NARROW = 700; // px: wider dot spacing, fewer comets
 const CYAN = '0,217,255';
 const GROUPS = 5; // twinkle phase groups
@@ -50,7 +56,8 @@ export function createMap(canvas, opts = {}) {
   let reduced = motion.matches;
   let mask = null;
   let w = 0; let h = 0; let d = 1;
-  let S = 1; let OX = 0; let OY = 0;
+  // the view: device pixels per degree and the lon/lat at the centre of the canvas
+  let S = 1; let CLON = 0; let CLAT = 0;
   let dots = [];
   let layers = [];
   let arcs = [];
@@ -69,23 +76,53 @@ export function createMap(canvas, opts = {}) {
     return mask[(py * MW + px) * 4 + 3] > 128;
   };
 
-  // device pixels
-  const proj = (lon, lat) => [OX + (lon + 180) * S, OY + (LAT0 - lat) * S];
+  // [lon, lat] <-> device pixels
+  const proj = (lon, lat) => [w / 2 + (lon - CLON) * S, h / 2 + (CLAT - lat) * S];
+  const unproj = (x, y) => [CLON + (x - w / 2) / S, CLAT - (y - h / 2) / S];
+
+  function setView() {
+    if (h > w) {
+      const v = PORTRAIT;
+      S = Math.max(w / (v.lon1 - v.lon0), h / (v.lat0 - v.lat1));
+      const hw = w / 2 / S; const hh = h / 2 / S; // half the view, in degrees
+      const clamp = (x, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.min(Math.max(x, lo), hi));
+      CLON = clamp(v.focus[0], v.lon0 + hw, v.lon1 - hw);
+      CLAT = clamp(v.focus[1], v.lat1 + hh, v.lat0 - hh);
+    } else {
+      // the whole world (lon -180..180, lat LAT0..LAT0-LATS), cover-fit and centred
+      S = Math.max(w / 360, h / LATS);
+      CLON = 0;
+      CLAT = LAT0 - LATS / 2;
+    }
+  }
+
+  // A point off the canvas moved to the canvas edge, on the line from the search box towards
+  // it (a comet from a country outside the view starts at the edge in that direction).
+  function toEdge(p) {
+    if (p[0] >= 0 && p[0] <= w && p[1] >= 0 && p[1] <= h) return p;
+    const H = home();
+    const cx = Math.min(Math.max(H[0], 0), w);
+    const cy = Math.min(Math.max(H[1], 0), h);
+    const dx = p[0] - cx; const dy = p[1] - cy;
+    const kx = dx > 0 ? (w - cx) / dx : dx < 0 ? -cx / dx : Infinity;
+    const ky = dy > 0 ? (h - cy) / dy : dy < 0 ? -cy / dy : Infinity;
+    const k = Math.min(kx, ky, 1);
+    return [cx + dx * k, cy + dy * k];
+  }
 
   function resize() {
     d = Math.min(window.devicePixelRatio || 1, 2);
     const cw = window.innerWidth;
     w = canvas.width = Math.round(cw * d);
     h = canvas.height = Math.round(window.innerHeight * d);
-    S = Math.max(w / 360, h / LATS);
-    OX = (w - 360 * S) / 2;
-    OY = (h - LATS * S) / 2;
+    setView();
     dots = [];
     const step = (cw < NARROW ? 10 : 7) * d; // about half the dots on narrow screens
     if (mask) {
       for (let yy = step / 2; yy < h; yy += step) {
         for (let xx = step / 2; xx < w; xx += step) {
-          if (isLand((xx - OX) / S - 180, LAT0 - (yy - OY) / S)) {
+          const [lon, lat] = unproj(xx, yy);
+          if (isLand(lon, lat)) {
             dots.push([xx, yy, Math.floor(Math.random() * GROUPS)]);
           }
         }
@@ -306,13 +343,14 @@ export function createMap(canvas, opts = {}) {
 
   return {
     /**
-     * A comet from [lon, lat] (or a random land point when null). A big comet flies to the
-     * search box; a small one to another random land point. Resolves on impact (at once with
-     * reduced motion).
+     * A comet from [lon, lat] (or a random land point when null; a point outside the view
+     * starts at the canvas edge in its direction). A big comet flies to the search box; a
+     * small one to another random land point. Resolves on impact (at once with reduced
+     * motion).
      */
     comet(fromLonLat, big) {
       if (reduced) return Promise.resolve();
-      const from = fromLonLat ? proj(fromLonLat[0], fromLonLat[1]) : null;
+      const from = fromLonLat ? toEdge(proj(fromLonLat[0], fromLonLat[1])) : null;
       return new Promise((resolve) => spawn(from, big, resolve));
     },
     /** An expanding ring from (x, y) that lights the dots it crosses; rgb "r,g,b" or [r,g,b]. */

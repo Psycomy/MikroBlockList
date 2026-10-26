@@ -172,6 +172,7 @@ form.scanning ~ .bar { opacity: 1; }
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   animation: pop .35s ease-out;
   overflow-wrap: anywhere;
+  scroll-margin: 52px 12px 12px; /* the top one clears the ES/EN switcher */
 }
 @keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
 .card.bad { border: 1px solid var(--red); box-shadow: 0 0 40px rgba(255, 56, 96, .35); }
@@ -308,6 +309,16 @@ dialog.sources::backdrop { background: rgba(0, 4, 10, .7); }
 .sources td.notice { color: var(--dim); font-size: 11.5px; min-width: 14em; }
 .src-name { white-space: nowrap; }
 .src-failed { color: var(--amber); }
+/* the same data as stacked cards, on narrow screens */
+.src-cards { display: none; list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+.src-card { padding: 10px 0; border-bottom: 1px solid rgba(0, 217, 255, .12); line-height: 1.55; }
+.src-card:first-child { padding-top: 2px; }
+.sc-head { font-size: 13.5px; }
+.sc-line { margin-top: 4px; overflow-wrap: anywhere; }
+.sc-k {
+  display: block; color: var(--dim); letter-spacing: 1px; text-transform: uppercase; font-size: 10px;
+}
+.sc-line.notice { color: var(--dim); font-size: 11.5px; }
 
 /* footer */
 .foot {
@@ -316,8 +327,12 @@ dialog.sources::backdrop { background: rgba(0, 4, 10, .7); }
   line-height: 1.7;
 }
 #foot-counts { color: var(--txt); }
-.foot-links .sep { margin: 0 6px; }
+/* separators never start a line: app.js marks an item that starts one with .ls */
 .fl { white-space: nowrap; }
+.foot-counts .fl + .fl::before { content: '· '; }
+.foot-links .fl + .fl::before { content: '·'; margin: 0 6px; }
+.fl-list > .fl.ls::before { content: none; }
+.fl-list > .fl.ls-keep::before { visibility: hidden; }
 
 @media (max-width: 699.98px) {
   .ticker { display: none; }
@@ -330,6 +345,10 @@ dialog.sources::backdrop { background: rgba(0, 4, 10, .7); }
   .card { padding: 16px 16px; }
   .verdict { font-size: 20px; }
   .dlg-in { padding: 14px 14px 16px; }
+  .status { text-wrap: balance; }
+  body.searched .help { display: none; }
+  .tbl-wrap { display: none; }
+  .src-cards { display: block; }
 }
 
 @media (prefers-reduced-motion: reduce) {

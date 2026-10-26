@@ -178,7 +178,7 @@ class RenderTest(unittest.TestCase):
         self.assertIn("GPL-3.0", notice)
         self.assertIn("2026-10-19T04:17:00Z", notice)
         rows = [l for l in notice.splitlines() if l.startswith("| ")]
-        self.assertEqual(rows[0], "| source | url | category | license / terms | variants | entries | entries6 | error | Notice |")
+        self.assertEqual(rows[0], "| source | url | category | license / terms | variants | entries | entries6 | error | notice |")
         self.assertIn("| spamhaus-drop | https://www.spamhaus.org/drop/drop.txt | attack "
                       "| Spamhaus DROP terms | full | 2 | 0 |  | (c) The Spamhaus Project SLU (fetched 2026-10-19T04:17:00Z) |", rows)
         self.assertIn("| dshield | https://www.dshield.org/block.txt | attack | CC BY-NC-SA "

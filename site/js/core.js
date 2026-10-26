@@ -279,7 +279,7 @@ export function reportUrl(query, result) {
 
 /**
  * A CIDR with its host part hidden, for the ticker: "203.0.x.x" (first two octets) or
- * "2001:470:xxxx::" (first two hextets, a trailing zero one dropped). '?' if unparsable.
+ * "2001:xxxx::" (first hextet only; "::" for ::/0). '?' if unparsable.
  */
 export function maskCidr(cidr) {
   const net = typeof cidr === 'string' ? parseNetwork(cidr.trim()) : null;
@@ -287,10 +287,8 @@ export function maskCidr(cidr) {
   if (net.version === 4) {
     return `${(net.start >> 24n) & 0xFFn}.${(net.start >> 16n) & 0xFFn}.x.x`;
   }
-  const groups = [(net.start >> 112n) & 0xFFFFn, (net.start >> 96n) & 0xFFFFn]
-    .map((g) => g.toString(16));
-  if (groups[1] === '0') groups.pop();
-  return `${groups.join(':')}:xxxx::`;
+  if (net.start === 0n) return '::';
+  return `${((net.start >> 112n) & 0xFFFFn).toString(16)}:xxxx::`;
 }
 
 /**
