@@ -27,7 +27,7 @@ jobs:
       - run: python -m unittest discover -v
       # Lookup page core (site/js). Node 22+ loads core.js as an ES module without a
       # package.json; a directory argument is not expanded by node --test, so name the files.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
       - run: node --test site/js/*.test.mjs
