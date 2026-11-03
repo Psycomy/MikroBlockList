@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). The version in use is in [`VERSION`](VERSION), and the
 published list carries it as `script=<version>` in its header.
 
+## [Unreleased]
+
+### Changed
+- The `cdn-snapshot` check runs weekly (Wednesdays, 06:29 UTC) instead of monthly, so a change in
+  the CDN ranges reaches the fallback snapshot sooner.
+
 ## [3.5.1] - 2026-10-26
 
 ### Added

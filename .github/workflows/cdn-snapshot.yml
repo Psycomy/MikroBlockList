@@ -1,6 +1,6 @@
 name: cdn-snapshot
 
-# Monthly check of allowlist-cdn.snapshot.txt, the fallback used when a live
+# Weekly check (Wednesdays) of allowlist-cdn.snapshot.txt, the fallback used when a live
 # CDN list is rejected. When the live ranges differ from the snapshot, the
 # refreshed file is pushed to the cdn-snapshot-refresh branch and a
 # "cdn-snapshot" issue links to open the pull request (Actions may not create
@@ -8,7 +8,7 @@ name: cdn-snapshot
 # normal checks). The issue closes when the snapshot matches again.
 on:
   schedule:
-    - cron: "29 6 3 * *"
+    - cron: "29 6 * * 3"
   workflow_dispatch:
 
 concurrency: cdn-snapshot
