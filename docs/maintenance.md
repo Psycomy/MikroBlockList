@@ -11,7 +11,7 @@ later run is healthy.
 |---|---|---|
 | `build-health` | `build` workflow, daily schedule | a source failed or came back empty, a CDN list fell back to the snapshot, IPv6 was withheld, the lists are stale or the run did not publish |
 | `routeros-e2e` | `routeros-e2e` workflow, weekly | the installer fails its end-to-end tests on the **latest stable** RouterOS |
-| `cdn-snapshot` | `cdn-snapshot` workflow, monthly | the live CDN ranges no longer match `allowlist-cdn.snapshot.txt` |
+| `cdn-snapshot` | `cdn-snapshot` workflow, weekly (Wednesdays) | the live CDN ranges no longer match `allowlist-cdn.snapshot.txt` |
 
 You can run the same health check locally at any time:
 
@@ -81,8 +81,9 @@ summary prints the checksum).
 ## `cdn-snapshot` issue
 
 The issue links to a compare page: open the pull request from it (a PR opened by you runs the
-normal checks), check the diff and merge it. The next monthly run closes the issue. If the issue
-says the live lists could not be downloaded, it may be a one-off network error (the next monthly
+normal checks), check the diff and merge it. The next weekly run closes the issue (or run the
+`cdn-snapshot` workflow by hand to close it at once). If the issue
+says the live lists could not be downloaded, it may be a one-off network error (the next weekly
 run closes it) or the same provider problem as above.
 
 ## Dependabot pull requests
@@ -121,7 +122,7 @@ After the merge the published lists carry the new `script=` value and installed 
   - `build-health`, diaria: fuente caída o vacía, CDN usando la copia, IPv6 retenida, listas sin
     actualizar o build sin publicar;
   - `routeros-e2e`, semanal: la última RouterOS estable rompe el instalador;
-  - `cdn-snapshot`, mensual: los rangos de las CDN ya no coinciden con la copia.
+  - `cdn-snapshot`, semanal (los miércoles): los rangos de las CDN ya no coinciden con la copia.
 - Comprobación manual: `python3 -m mbl health --stats <URL de stats.json>`.
 - Fuente caída una semana: corrige la URL o desactívala (`enabled = false` con el motivo). Fuente vacía:
   cambió el formato (parser y fixture). Build detenido: mira el log; si el crecimiento es esperado,
