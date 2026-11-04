@@ -4,14 +4,14 @@ import io
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from ipaddress import IPv4Network, IPv6Network
 from pathlib import Path
 from unittest import mock
 
 from mbl.__main__ import main
 from mbl.build import _previous_stats, _previous_totals, build
-from mbl.cdn import CdnResult
+from mbl.cdn import CdnResult, read_snapshot
 from mbl.fetch import SourceResult
 from mbl.sources import Source
 
@@ -27,7 +27,7 @@ variants = ["lite", "full"]
 """
 FILES = {"blocklist.txt", "stats.json",
          "badge-entries.json", "badge-updated.json", "NOTICE.md", "routeros-full.txt",
-         "routeros-lite.txt", "blocklist-lite.txt", "lookup.json"}
+         "routeros-lite.txt", "blocklist-lite.txt", "lookup.json", "cdn-snapshot.txt"}
 
 
 NO_CDN = CdnResult([], {})
@@ -40,7 +40,7 @@ TEST_LIMITS = {"full": (500, 15000), "lite": (100, 2000)}
 
 def setUpModule():
     # Builds never touch the network for the CDN lists unless a test passes its own.
-    for patcher in (mock.patch("mbl.build.fetch_cdn", lambda snapshot: NO_CDN),
+    for patcher in (mock.patch("mbl.build.fetch_cdn", lambda snapshot, **kw: NO_CDN),
                     mock.patch("mbl.build.LIMITS", TEST_LIMITS)):
         patcher.start()
         unittest.addModuleCleanup(patcher.stop)
@@ -582,9 +582,18 @@ class MainTest(unittest.TestCase):
         self.assertEqual(build_mock.call_args.kwargs["version_path"], Path("x/V"))
 
 
+    @mock.patch("mbl.__main__.build", return_value=0)
+    def test_previous_cdn_flag(self, build_mock):
+        main(["build"])
+        self.assertIsNone(build_mock.call_args.kwargs["previous_cdn_url"])
+        main(["build", "--previous-cdn", "https://x/lists/cdn-snapshot.txt"])
+        self.assertEqual(build_mock.call_args.kwargs["previous_cdn_url"],
+                         "https://x/lists/cdn-snapshot.txt")
+
+
 class CdnAllowlistTest(BuildBase):
     def _cdn_build(self, fetcher, result, **kwargs):
-        return self._build(fetcher, cdn_fetcher=lambda snapshot: result, **kwargs)
+        return self._build(fetcher, cdn_fetcher=lambda snapshot, **kw: result, **kwargs)
 
     def test_allowlist_cap_fails_build(self):
         # 1.0.0.0/17 covers 128 of the 900 /32 entries: 14.2 %
@@ -688,6 +697,43 @@ class CdnAllowlistTest(BuildBase):
         self.assertEqual(cap["ipv4"], {"addresses": 600, "addresses_removed": 32,
                                        "addresses_pct": 5.33, "entries": 600,
                                        "entries_touched": 32, "entries_pct": 5.33})
+
+    def test_previous_cdn_url_reaches_fetch_cdn(self):
+        seen = {}
+
+        def cdn_fetcher(snapshot, **kwargs):
+            seen.update(kwargs, snapshot=snapshot)
+            return NO_CDN
+        url = "https://x/lists/cdn-snapshot.txt"
+        self.assertEqual(self._build(_fetcher(), cdn_fetcher=cdn_fetcher,
+                                     previous_cdn_url=url), 0)
+        self.assertEqual(seen["previous_url"], url)
+        self.assertEqual(self._build(_fetcher(), cdn_fetcher=cdn_fetcher), 0)
+        self.assertIsNone(seen["previous_url"])
+
+    def test_build_writes_cdn_snapshot(self):
+        nets = [IPv4Network(f"9.{i}.0.0/24") for i in range(6)] + [IPv6Network("2a09::/32")]
+        old = [IPv4Network(f"8.{i}.0.0/24") for i in range(6)] + [IPv6Network("2a08::/32")]
+        info = {"cloudflare": {"source": "live", "prefixes4": 6, "prefixes6": 1},
+                "fastly": {"source": "published", "prefixes4": 6, "prefixes6": 1},
+                "cloudfront": {"source": "missing", "prefixes4": 0, "prefixes6": 0}}
+        result = CdnResult([*nets, *old], info,
+                           blocks={"cloudflare": nets, "fastly": old},
+                           dates={"cloudflare": date(2026, 10, 19),
+                                  "fastly": date(2026, 9, 1)})
+        self.assertEqual(self._cdn_build(_fetcher(), result), 0)
+        self.assertEqual({p.name for p in self.out.iterdir()}, FILES)
+        text = (self.out / "cdn-snapshot.txt").read_text()
+        self.assertEqual(text.splitlines()[0], "# provider cloudflare 2026-10-19")
+        self.assertIn("# provider fastly 2026-09-01\n8.0.0.0/24\n", text)
+        self.assertNotIn("cloudfront", text)
+        self.assertEqual(read_snapshot(self.out / "cdn-snapshot.txt"),
+                         {"cloudflare": nets, "fastly": old})
+
+    def test_cdn_snapshot_write_failure_does_not_break_build(self):
+        with mock.patch("mbl.build.write_snapshot", side_effect=OSError("disk")):
+            self.assertEqual(self._build(_fetcher()), 0)
+        self.assertEqual({p.name for p in self.out.iterdir()}, FILES - {"cdn-snapshot.txt"})
 
     def test_cdn_warnings_go_to_step_summary(self):
         summary = self.tmp / "summary.md"

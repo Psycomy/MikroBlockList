@@ -49,8 +49,11 @@ def problems(stats: dict, today: date) -> list[str]:
     for name, info in (cdn.items() if isinstance(cdn, dict) else []):
         if name == "cap" or not isinstance(info, dict) or info.get("source") == "live":
             continue
-        if info.get("source") == "snapshot":
-            found.append(f"CDN allowlist {name}: live list rejected, used the snapshot")
+        if info.get("source") == "published":
+            found.append(f"CDN allowlist {name}: live list rejected, "
+                         "used yesterday's published copy")
+        elif info.get("source") == "snapshot":
+            found.append(f"CDN allowlist {name}: live list rejected, used the committed snapshot")
         else:
             found.append(f"CDN allowlist {name}: live list rejected and no snapshot, built without it")
 

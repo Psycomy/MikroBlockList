@@ -238,5 +238,134 @@ class SnapshotTest(CdnTestBase):
         self.assertFalse(out.exists())
 
 
+PUBLISHED_URL = "https://example.invalid/lists/cdn-snapshot.txt"
+
+
+def _published_text():
+    return (
+        "# provider cloudflare 2026-10-20\n"
+        + "".join(f"31{i}.0.0.0/24\n".replace("31", "17", 1) for i in range(1, 7))
+        + "2606:4700::/32\n"
+        + "# provider fastly 2026-09-01\n"
+        + "".join(f"18{i}.0.0.0/24\n" for i in range(1, 7))
+        + "2a04:4e40::/32\n"
+    )
+
+
+class PublishedTest(CdnTestBase):
+    TODAY = date(2026, 10, 21)
+
+    def fetch_pub(self, overrides=None, published=None, snapshot=None, calls=None):
+        """fetch_cdn with a published copy at PUBLISHED_URL (text, or an Exception)."""
+        live = _fetcher(overrides)
+        calls = calls if calls is not None else []
+
+        def fetch(url):
+            calls.append(url)
+            if url == PUBLISHED_URL:
+                if isinstance(published, Exception):
+                    raise published
+                return _published_text() if published is None else published
+            return live(url)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            result = cdn.fetch_cdn(snapshot or self.snapshot, fetch, backoff=0,
+                                   today=self.TODAY, previous_url=PUBLISHED_URL)
+        return result, err.getvalue()
+
+    def test_published_preferred_over_committed(self):
+        result, err = self.fetch_pub({"https://www.cloudflare.com/ips-v4": OSError("down")})
+        self.assertEqual(result.info["cloudflare"],
+                         {"source": "published", "prefixes4": 6, "prefixes6": 1})
+        self.assertIn(ip_network("171.0.0.0/24"), result.networks)
+        self.assertNotIn(ip_network("201.0.0.0/24"), result.networks)
+        self.assertEqual(len(result.warnings), 1)
+        self.assertIn("yesterday's published copy", result.warnings[0])
+        self.assertIn("cloudflare", err)
+
+    def test_provider_absent_from_published_uses_committed(self):
+        down = {"https://ip-ranges.amazonaws.com/ip-ranges.json": OSError("down")}
+        result, _ = self.fetch_pub(down)
+        self.assertEqual(result.info["cloudfront"]["source"], "snapshot")
+        self.assertIn("committed snapshot", result.warnings[0])
+
+    def test_unavailable_or_invalid_published_uses_committed(self):
+        down = {"https://www.cloudflare.com/ips-v4": OSError("down")}
+        not_found = urllib.error.HTTPError(PUBLISHED_URL, 404, "Not Found", {}, None)
+        for published in (not_found, OSError("down"), "<html>nope</html>",
+                          "# provider cloudflare 2026-10-20\n0.0.0.0/0\n"):
+            result, _ = self.fetch_pub(down, published=published)
+            self.assertEqual(result.info["cloudflare"]["source"], "snapshot", published)
+            self.assertIn(ip_network("201.0.0.0/24"), result.networks)
+
+    def test_neither_published_nor_committed_is_missing(self):
+        down = {"https://www.cloudflare.com/ips-v4": OSError("down")}
+        result, _ = self.fetch_pub(down, published=OSError("down"),
+                                   snapshot=self.tmp / "none.txt")
+        self.assertEqual(result.info["cloudflare"]["source"], "missing")
+        self.assertNotIn("cloudflare", result.blocks)
+
+    def test_published_fetched_once_and_only_when_needed(self):
+        calls = []
+        self.fetch_pub(calls=calls)
+        self.assertNotIn(PUBLISHED_URL, calls)
+        calls = []
+        self.fetch_pub({u: OSError("down") for u in URL_FILES}, calls=calls)
+        self.assertEqual(calls.count(PUBLISHED_URL), 1)
+        calls = []
+        self.fetch_pub({u: OSError("down") for u in URL_FILES}, published=OSError("x"),
+                       calls=calls)
+        self.assertEqual(calls.count(PUBLISHED_URL), 1)
+
+    def test_old_published_block_warns(self):
+        # fastly in the published copy is dated 2026-09-01; 91 days later
+        self.TODAY = date(2026, 12, 1)
+        result, _ = self.fetch_pub({"https://api.fastly.com/public-ip-list": OSError("down")})
+        self.assertEqual(result.info["fastly"]["source"], "published")
+        self.assertIn("91 days old", result.warnings[0])
+
+    def test_never_raises(self):
+        def fetch(url):
+            raise RuntimeError("boom")
+        with contextlib.redirect_stderr(io.StringIO()):
+            result = cdn.fetch_cdn(self.tmp / "none.txt", fetch, backoff=0,
+                                   previous_url=PUBLISHED_URL)
+        self.assertEqual({i["source"] for i in result.info.values()}, {"missing"})
+
+    def test_blocks_and_dates(self):
+        down = {"https://www.cloudflare.com/ips-v4": OSError("down"),
+                "https://ip-ranges.amazonaws.com/ip-ranges.json": OSError("down")}
+        result, _ = self.fetch_pub(down, snapshot=self.tmp / "none.txt")
+        self.assertEqual(set(result.blocks), {"cloudflare", "fastly"})
+        self.assertEqual(result.dates, {"cloudflare": date(2026, 10, 20),
+                                        "fastly": self.TODAY})
+        self.assertEqual(sorted(str(n) for b in result.blocks.values() for n in b),
+                         sorted(map(str, result.networks)))
+
+    def test_written_snapshot_dates_and_roundtrip(self):
+        # cloudflare from the published copy (2026-10-20), fastly live (today),
+        # cloudfront missing everywhere
+        down = {"https://www.cloudflare.com/ips-v4": OSError("down"),
+                "https://ip-ranges.amazonaws.com/ip-ranges.json": OSError("down")}
+        result, _ = self.fetch_pub(down, snapshot=self.tmp / "none.txt")
+        out = self.tmp / "cdn-snapshot.txt"
+        cdn.write_snapshot(out, result.blocks, result.dates)
+        text = out.read_text()
+        self.assertTrue(text.startswith("# provider cloudflare 2026-10-20\n"))
+        self.assertIn("# provider fastly 2026-10-21\n", text)
+        self.assertNotIn("cloudfront", text)
+        blocks, dates = cdn._read_snapshot(out)
+        self.assertEqual(blocks, result.blocks)
+        self.assertEqual(dates, result.dates)
+
+    def test_write_snapshot_undated_block_stays_undated(self):
+        out = self.tmp / "snap.txt"
+        blocks = cdn.read_snapshot(self.snapshot)
+        cdn.write_snapshot(out, blocks, {"cloudflare": None, "fastly": date(2026, 1, 1),
+                                         "cloudfront": date(2026, 1, 1)})
+        self.assertTrue(out.read_text().startswith("# provider cloudflare\n"))
+        self.assertIsNone(cdn._read_snapshot(out)[1]["cloudflare"])
+
+
 if __name__ == "__main__":
     unittest.main()

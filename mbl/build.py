@@ -9,7 +9,7 @@ from bisect import bisect_right
 from datetime import datetime, timezone
 from pathlib import Path
 
-from mbl.cdn import DEFAULT_SNAPSHOT, CdnResult, fetch_cdn
+from mbl.cdn import DEFAULT_SNAPSHOT, CdnResult, fetch_cdn, write_snapshot
 from mbl.checks import LIMITS, LIMITS6, MAX_DROP, safety_errors
 from mbl.fetch import USER_AGENT, SourceResult, fetch_all
 from mbl.geo import CountryDb
@@ -21,6 +21,7 @@ from mbl.sources import VARIANTS, load_allowlist, load_sources
 PREVIOUS_TIMEOUT = 15
 MAX_ALLOWLIST_REMOVAL = 0.10
 IPV6_PREFIX = "ipv6:"
+CDN_SNAPSHOT_FILE = "cdn-snapshot.txt"  # the next build's first CDN fallback
 
 
 def _int(value) -> bool:
@@ -161,7 +162,8 @@ def build(sources_path: Path, allowlist_path: Path, out_dir: Path,
           previous_stats_url: str | None, now: datetime | None = None,
           fetcher=fetch_all, allow_growth: bool = False,
           version_path: Path = Path("VERSION"), cdn_fetcher=None,
-          cdn_snapshot: Path = DEFAULT_SNAPSHOT, dbip_path: Path | None = None) -> int:
+          cdn_snapshot: Path = DEFAULT_SNAPSHOT, dbip_path: Path | None = None,
+          previous_cdn_url: str | None = None) -> int:
     """Return 0 on success, 1 if safety checks fail, 2 on configuration errors."""
     try:
         sources = load_sources(Path(sources_path))
@@ -177,7 +179,8 @@ def build(sources_path: Path, allowlist_path: Path, out_dir: Path,
 
     now = now or datetime.now(timezone.utc)
     results = fetcher(sources)
-    cdn: CdnResult = (cdn_fetcher or fetch_cdn)(Path(cdn_snapshot))
+    cdn: CdnResult = (cdn_fetcher or fetch_cdn)(Path(cdn_snapshot),
+                                                previous_url=previous_cdn_url)
     allowlist = [*allowlist, *cdn.networks]
     variants, cap_errors = {}, []
     cap = {"limit_pct": round(MAX_ALLOWLIST_REMOVAL * 100, 2)}
@@ -262,6 +265,13 @@ def build(sources_path: Path, allowlist_path: Path, out_dir: Path,
     write_outputs(Path(out_dir), variants, results, now, script_version, variants6,
                   ipv6_baseline=baseline6, files6=files6,
                   cdn_info={**cdn.info, "cap": cap})
+    # The CDN blocks used today, for tomorrow's fallback: best effort, a failure
+    # only means the next build falls back to the committed snapshot.
+    try:
+        write_snapshot(Path(out_dir) / CDN_SNAPSHOT_FILE, cdn.blocks, cdn.dates)
+    except Exception as exc:
+        print(f"warning: {CDN_SNAPSHOT_FILE} not published ({type(exc).__name__}: {exc})",
+              file=sys.stderr)
     # The lookup page data is best effort: without DB-IP it has no countries, and
     # any other failure only skips lookup.json (removing a stale one).
     geo = None

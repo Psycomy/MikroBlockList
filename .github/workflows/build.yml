@@ -80,6 +80,8 @@ jobs:
         env:
           ALLOW_GROWTH: ${{ inputs.allow_growth }}
           PREVIOUS_STATS: "https://raw.githubusercontent.com/${{ github.repository }}/lists/stats.json"
+          # Yesterday's CDN lists: the first fallback when a live CDN list is rejected.
+          PREVIOUS_CDN: "https://raw.githubusercontent.com/${{ github.repository }}/lists/cdn-snapshot.txt"
         run: |
           extra=()
           if [ "$ALLOW_GROWTH" = "true" ]; then extra+=(--allow-growth); fi
@@ -88,6 +90,7 @@ jobs:
             --allowlist allowlist.txt \
             --out dist \
             --previous-stats "$PREVIOUS_STATS" \
+            --previous-cdn "$PREVIOUS_CDN" \
             ${DBIP:+--dbip "$DBIP"} \
             "${extra[@]}"
 
@@ -109,8 +112,9 @@ jobs:
             push -f "https://github.com/${REPO}" lists
 
   # Daily health report: one "build-health" issue, opened when something needs
-  # attention (failed or empty source, CDN snapshot in use or getting old, IPv6
-  # withheld, stale lists, failed run) and closed when a run is healthy again.
+  # attention (failed or empty source, CDN list from yesterday's copy or the
+  # committed snapshot, IPv6 withheld, stale lists, failed run) and closed when
+  # a run is healthy again.
   # Only on the schedule: push and manual runs do not open or close it.
   health:
     needs: publish
