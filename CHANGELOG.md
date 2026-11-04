@@ -8,8 +8,16 @@ published list carries it as `script=<version>` in its header.
 ## [Unreleased]
 
 ### Changed
-- The `cdn-snapshot` check runs weekly (Wednesdays, 06:29 UTC) instead of monthly, so a change in
-  the CDN ranges reaches the fallback snapshot sooner.
+- The daily build publishes the CDN ranges it used as `cdn-snapshot.txt` on the `lists` branch
+  (live blocks dated that day, fallback blocks keep their own date). A rejected live CDN list now
+  falls back to yesterday's published copy first, then to the committed
+  `allowlist-cdn.snapshot.txt` (now only a last resort), then goes on without that provider.
+  New `python -m mbl build --previous-cdn URL`; `stats.json` reports `source: "published"`, and
+  `build-health` says which copy was used.
+
+### Removed
+- The `cdn-snapshot` workflow and its weekly issue and refresh branch: the committed snapshot only
+  needs an occasional manual refresh (`python3 -m mbl cdn-snapshot` and a PR).
 
 ## [3.5.1] - 2026-10-26
 

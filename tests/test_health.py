@@ -57,7 +57,14 @@ class ProblemsTest(unittest.TestCase):
         stats = _stats()
         stats["cdn_allowlist"]["fastly"] = {"source": "snapshot"}
         found = health.problems(stats, TODAY)
-        self.assertEqual(found, ["CDN allowlist fastly: live list rejected, used the snapshot"])
+        self.assertEqual(found, ["CDN allowlist fastly: live list rejected, used the committed snapshot"])
+
+    def test_cdn_published_used(self):
+        stats = _stats()
+        stats["cdn_allowlist"]["cloudflare"] = {"source": "published"}
+        found = health.problems(stats, TODAY)
+        self.assertEqual(found, ["CDN allowlist cloudflare: live list rejected, "
+                                 "used yesterday's published copy"])
 
     def test_cdn_missing(self):
         stats = _stats()

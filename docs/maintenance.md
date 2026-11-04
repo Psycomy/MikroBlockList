@@ -9,9 +9,8 @@ later run is healthy.
 
 | Issue label | Opened by | When |
 |---|---|---|
-| `build-health` | `build` workflow, daily schedule | a source failed or came back empty, a CDN list fell back to the snapshot, IPv6 was withheld, the lists are stale or the run did not publish |
+| `build-health` | `build` workflow, daily schedule | a source failed or came back empty, a CDN list fell back to yesterday's copy or the committed snapshot, IPv6 was withheld, the lists are stale or the run did not publish |
 | `routeros-e2e` | `routeros-e2e` workflow, weekly | the installer fails its end-to-end tests on the **latest stable** RouterOS |
-| `cdn-snapshot` | `cdn-snapshot` workflow, weekly (Wednesdays) | the live CDN ranges no longer match `allowlist-cdn.snapshot.txt` |
 
 You can run the same health check locally at any time:
 
@@ -41,10 +40,19 @@ GitHub Actions**. Until that is set, the first `pages` run fails; rerun it after
 - **`source X returned no entries`**: the download worked but nothing was parsed, which usually
   means the format changed. Compare the file with its `format` in `sources.toml`; fix the parser in
   `mbl/parsers.py` with an updated fixture in `tests/fixtures/`, or disable the source.
-- **`CDN allowlist X: live list rejected, used the snapshot`**: the provider changed its URL or
-  format (see `PROVIDERS` in `mbl/cdn.py`). The build keeps working with the snapshot; fix the
-  provider entry when you can. **`... and no snapshot, built without it`** is the same problem
-  without a fallback: that provider's ranges are not allowlisted until it is fixed, so fix it soon.
+- **CDN allowlist lines.** Each build publishes the CDN ranges it used as `cdn-snapshot.txt` on
+  the `lists` branch. When a provider's live list is rejected, the build falls back to yesterday's
+  published copy, then to the committed `allowlist-cdn.snapshot.txt`, then goes on without it.
+  - **`CDN allowlist X: live list rejected, used yesterday's published copy`**: one bad day is
+    normal. If it lasts, the provider changed its URL or format (see `PROVIDERS` in
+    `mbl/cdn.py`); fix the provider entry. The fallback block keeps its date, and after 90 days the
+    warning says how old it is.
+  - **`... used the committed snapshot`**: yesterday's copy was not usable either (first build, or
+    the `lists` branch could not be read). Fix the provider if needed, and refresh the committed
+    copy: `python3 -m mbl cdn-snapshot` and open a PR with the updated
+    `allowlist-cdn.snapshot.txt`.
+  - **`... and no snapshot, built without it`**: no fallback at all: that provider's ranges are not
+    allowlisted until it is fixed, so fix it soon.
 - **`IPv6 lists were withheld`**: IPv4 was published, IPv6 kept the previous files. The run log has
   the reason (`warning: IPv6 not published, ...`), usually an IPv6 count outside its limits.
 - **`the build did not publish`** or **`the published lists are N days old`**: open the run log.
@@ -78,14 +86,6 @@ Fix `routeros/install.rsc` (bump the script version, see below). Once it passes,
 version in `tests/e2e/chr-version.txt` (`<version> <sha256 of chr-<version>.img.zip>`; the run's
 summary prints the checksum).
 
-## `cdn-snapshot` issue
-
-The issue links to a compare page: open the pull request from it (a PR opened by you runs the
-normal checks), check the diff and merge it. The next weekly run closes the issue (or run the
-`cdn-snapshot` workflow by hand to close it at once). If the issue
-says the live lists could not be downloaded, it may be a one-off network error (the next weekly
-run closes it) or the same provider problem as above.
-
 ## Dependabot pull requests
 
 Once a month Dependabot proposes updated versions of the GitHub Actions used by the workflows, in
@@ -114,24 +114,30 @@ After the merge the published lists carry the new `script=` value and installed 
 - Review the terms of every source (`license_note` in `sources.toml`, the README table): still
   free, still fine for home / non-commercial use.
 - Look for new free sources that add coverage without overlapping the current ones.
+- Refresh the committed CDN snapshot (the last-resort fallback): `python3 -m mbl cdn-snapshot`,
+  then a PR with `allowlist-cdn.snapshot.txt`.
 
 ## Resumen en español
 
 - El proyecto funciona solo. Los problemas llegan como **incidencias que abren los workflows**, que
   recibes por correo, y que se cierran solas cuando una ejecución posterior va bien:
-  - `build-health`, diaria: fuente caída o vacía, CDN usando la copia, IPv6 retenida, listas sin
-    actualizar o build sin publicar;
-  - `routeros-e2e`, semanal: la última RouterOS estable rompe el instalador;
-  - `cdn-snapshot`, semanal (los miércoles): los rangos de las CDN ya no coinciden con la copia.
+  - `build-health`, diaria: fuente caída o vacía, CDN usando la copia de ayer o la del
+    repositorio, IPv6 retenida, listas sin actualizar o build sin publicar;
+  - `routeros-e2e`, semanal: la última RouterOS estable rompe el instalador.
 - Comprobación manual: `python3 -m mbl health --stats <URL de stats.json>`.
 - Fuente caída una semana: corrige la URL o desactívala (`enabled = false` con el motivo). Fuente vacía:
   cambió el formato (parser y fixture). Build detenido: mira el log; si el crecimiento es esperado,
   lanza el workflow a mano con **allow_growth**; si es el tope de la allowlist, ver la guía de seguridad.
-- `cdn-snapshot`: abre el PR desde el enlace de la incidencia y fusiónalo cuando el CI esté en verde.
+- CDN: cada build publica en `lists` los rangos usados (`cdn-snapshot.txt`). Si una lista en vivo
+  se rechaza, se usa la copia publicada ayer, luego `allowlist-cdn.snapshot.txt` del repositorio y,
+  si no, se sigue sin ese proveedor. La copia del repositorio solo se renueva a mano de vez en cuando
+  (`python3 -m mbl cdn-snapshot` y PR): cuando `build-health` diga "used the committed snapshot" o
+  una vez al año.
 - `routeros-e2e`: reproduce en local con `MBL_E2E_CHR_VERSION=<versión>`, corrige el instalador y
   sube la versión del script.
 - Dependabot: un PR al mes con las Actions actualizadas; fusiónalo si el CI pasa.
 - Si GitHub avisa de que va a desactivar los workflows programados por inactividad (60 días),
   reactívalos en *Actions* o fusiona cualquier PR.
 - Cada cambio en el script del router: `VERSION` y `mblScriptVersion`, CHANGELOG y `e2e` en verde.
-- Una vez al año: revisa las licencias de las fuentes y busca fuentes nuevas.
+- Una vez al año: revisa las licencias de las fuentes, busca fuentes nuevas y renueva la copia de
+  las CDN del repositorio.

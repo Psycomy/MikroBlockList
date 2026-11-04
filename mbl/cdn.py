@@ -1,4 +1,5 @@
-"""Automatic CDN allowlist: live provider lists with a committed snapshot fallback."""
+"""Automatic CDN allowlist: live provider lists, falling back to yesterday's published copy
+and then to the committed snapshot."""
 import json
 import re
 import sys
@@ -60,6 +61,10 @@ class CdnResult:
     networks: list[Network] = field(default_factory=list)
     info: dict[str, dict] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    # the block used per provider (missing ones left out) and its date: today for a
+    # live block, the header date (None if undated) for a fallback block
+    blocks: dict[str, list[Network]] = field(default_factory=dict)
+    dates: dict[str, date | None] = field(default_factory=dict)
 
 
 def _validate(nets4: list[IPv4Network], nets6: list[IPv6Network]) -> None:
@@ -105,12 +110,11 @@ def fetch_live(fetcher: Callable[[str], str] | None = None,
     return blocks
 
 
-def _read_snapshot(path: Path) -> tuple[dict[str, list[Network]], dict[str, date | None]]:
-    """Valid provider blocks of the snapshot and the date in each block header (None if none)."""
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return {}, {}
+Blocks = tuple[dict[str, list[Network]], dict[str, date | None]]
+
+
+def _parse_snapshot(text: str) -> Blocks:
+    """Valid provider blocks of a snapshot text and the date in each block header (None if none)."""
     raw: dict[str, list[str]] = {}
     dates: dict[str, date | None] = {}
     current = None
@@ -137,17 +141,44 @@ def _read_snapshot(path: Path) -> tuple[dict[str, list[Network]], dict[str, date
     return blocks, {name: dates[name] for name in blocks}
 
 
+def _read_snapshot(path: Path) -> Blocks:
+    """_parse_snapshot of a file; an unreadable file has no blocks."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return {}, {}
+    return _parse_snapshot(text)
+
+
+def _published(url: str | None, fetcher: Callable[[str], str]) -> Blocks:
+    """Blocks of the copy published by the previous build; any problem means none."""
+    if not url:
+        return {}, {}
+    try:
+        return _parse_snapshot(fetcher(url))
+    except Exception as exc:  # 404, network error...
+        print(f"warning: previous CDN snapshot unavailable ({type(exc).__name__}: {exc})",
+              file=sys.stderr)
+        return {}, {}
+
+
 def read_snapshot(path: Path) -> dict[str, list[Network]]:
     """Provider blocks of the snapshot; an unreadable file or invalid block is left out."""
     return _read_snapshot(path)[0]
 
 
-def write_snapshot(path: Path, blocks: dict[str, list[Network]], day: date) -> None:
-    """One '# provider <name> <date>' header and one CIDR per line, per provider."""
+def write_snapshot(path: Path, blocks: dict[str, list[Network]],
+                   day: date | dict[str, date | None]) -> None:
+    """One '# provider <name> <date>' header and one CIDR per line, per provider.
+
+    day is one date for every block, or a date per provider (None: no date in the header).
+    """
     lines = []
     for name in PROVIDERS:
         if name in blocks:
-            lines.append(f"# provider {name} {day.isoformat()}")
+            when = day.get(name) if isinstance(day, dict) else day
+            lines.append(f"# provider {name} {when.isoformat()}" if when
+                         else f"# provider {name}")
             lines.extend(str(n) for n in blocks[name])
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
@@ -158,47 +189,66 @@ def _info(source: str, nets: list[Network]) -> dict:
             "prefixes6": sum(n.version == 6 for n in nets)}
 
 
-def _age_note(day: date | None, today: date) -> str:
+def _age_note(day: date | None, today: date, source: str = "snapshot") -> str:
     """'' for a block at most MAX_SNAPSHOT_AGE_DAYS old, else a note for the warning."""
     if day is None:
-        return "; the snapshot block is of unknown age (no date in its header)"
+        return f"; the {source} block is of unknown age (no date in its header)"
     age = (today - day).days
     if age > MAX_SNAPSHOT_AGE_DAYS:
-        return (f"; the snapshot block is {age} days old ({day.isoformat()}), "
-                "refresh it with: python3 -m mbl cdn-snapshot")
+        note = f"; the {source} block is {age} days old ({day.isoformat()})"
+        if source == "snapshot":
+            note += ", refresh it with: python3 -m mbl cdn-snapshot"
+        return note
     return ""
+
+
+FALLBACK_LABELS = {"published": "yesterday's published copy", "snapshot": "the committed snapshot"}
 
 
 def fetch_cdn(snapshot_path: Path = DEFAULT_SNAPSHOT,
               fetcher: Callable[[str], str] | None = None, backoff: float = 2,
-              today: date | None = None) -> CdnResult:
-    """Live lists per provider; a rejected provider falls back to its snapshot block.
+              today: date | None = None, previous_url: str | None = None) -> CdnResult:
+    """Live lists per provider; a rejected provider falls back to its block in the
+    copy published by the previous build (previous_url), then in the committed snapshot.
 
-    Never raises: a provider with neither is left out and reported as missing.
-    A snapshot block older than MAX_SNAPSHOT_AGE_DAYS (by its header date,
-    against today, default the current UTC date) is used with a louder warning.
+    The published copy is downloaded only when a live list is rejected, at most
+    once. Never raises: a provider with no usable block is left out and reported
+    as missing. A fallback block older than MAX_SNAPSHOT_AGE_DAYS (by its header
+    date, against today, default the current UTC date) is used with a louder warning.
     """
     fetcher = fetcher or _default_fetcher(backoff)
     today = today or datetime.now(timezone.utc).date()
-    snapshot = dates = None
+    fallbacks: dict[str, Blocks] = {}
+
+    def fallback(source: str) -> Blocks:
+        if source not in fallbacks:
+            fallbacks[source] = (_published(previous_url, fetcher) if source == "published"
+                                 else _read_snapshot(snapshot_path))
+        return fallbacks[source]
+
     result = CdnResult()
     for name, provider in PROVIDERS.items():
         try:
-            nets, source, problem = _live(provider, fetcher), "live", None
+            nets, source, day = _live(provider, fetcher), "live", today
         except Exception as exc:
             problem = f"{type(exc).__name__}: {exc}"
-            if snapshot is None:
-                snapshot, dates = _read_snapshot(snapshot_path)
-            if name in snapshot:
-                nets, source = snapshot[name], "snapshot"
-                warning = (f"CDN allowlist {name}: live list rejected ({problem}); using snapshot"
-                           + _age_note(dates[name], today))
-            else:
-                nets, source = [], "missing"
+            nets, source, day = [], "missing", None
+            for candidate in FALLBACK_LABELS:
+                blocks, dates = fallback(candidate)
+                if name in blocks:
+                    nets, source, day = blocks[name], candidate, dates[name]
+                    break
+            if source == "missing":
                 warning = (f"CDN allowlist {name}: live list rejected ({problem}) and no "
-                           "snapshot block; building without it")
+                           "published or snapshot block; building without it")
+            else:
+                warning = (f"CDN allowlist {name}: live list rejected ({problem}); using "
+                           f"{FALLBACK_LABELS[source]}" + _age_note(day, today, source))
             result.warnings.append(warning)
             print(f"warning: {warning}", file=sys.stderr)
         result.networks.extend(nets)
         result.info[name] = _info(source, nets)
+        if source != "missing":
+            result.blocks[name] = nets
+            result.dates[name] = day
     return result

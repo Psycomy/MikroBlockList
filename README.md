@@ -285,9 +285,11 @@ public DNS only).
 
 - A download is rejected if it cannot be read, has fewer than 5 IPv4 prefixes, or contains an IPv4
   prefix broader than /8 or an IPv6 prefix broader than /16 (so `0.0.0.0/0` never empties the list).
-- A rejected provider falls back to its block in
-  [`allowlist-cdn.snapshot.txt`](allowlist-cdn.snapshot.txt); if it is not there either, the build
-  goes on without it and warns on stderr and in the step summary.
+- Every build publishes the CDN blocks it used as `cdn-snapshot.txt` on the `lists` branch. A
+  rejected provider falls back, in order, to its block in yesterday's published `cdn-snapshot.txt`,
+  then in the committed [`allowlist-cdn.snapshot.txt`](allowlist-cdn.snapshot.txt) (a last resort);
+  if it is in neither, the build goes on without it. Each fallback warns on stderr, in the step
+  summary and in the `build-health` issue.
 - Safety cap, measured two ways against the list before the allowlist: the addresses it removes
   and the entries it touches (an entry that overlaps any allowlist range, wholly or partly). If
   either is over 10 % of the IPv4 `full` list, the build fails; for IPv6 the IPv6 files are
@@ -296,14 +298,15 @@ public DNS only).
   and re-run (see [`docs/security.md`](docs/security.md#when-the-allowlist-cap-stops-the-build)).
   Adding more ranges to [`allowlist.txt`](allowlist.txt) never gets a build under the cap: it is
   counted in the same measures.
-- `stats.json` reports it under `cdn_allowlist` (per provider: `source` = `live`, `snapshot` or
-  `missing`, plus `prefixes4` and `prefixes6`) and `cdn_allowlist.cap` (`limit_pct`, and per family
+- `stats.json` reports it under `cdn_allowlist` (per provider: `source` = `live`, `published`,
+  `snapshot` or `missing`, plus `prefixes4` and `prefixes6`) and `cdn_allowlist.cap` (`limit_pct`, and per family
   `ipv4` / `ipv6`: `addresses`, `addresses_removed`, `addresses_pct`, `entries`, `entries_touched`,
   `entries_pct`).
-- A snapshot block older than 90 days (date in its `# provider <name> <date>` header) is still
-  used, with a louder warning asking for a refresh.
-- The snapshot is refreshed by hand, through a pull request:
-  `python -m mbl cdn-snapshot --out allowlist-cdn.snapshot.txt`. The workflow never commits to `main`.
+- In `cdn-snapshot.txt` a live block is dated with the build day; a fallback block keeps its own
+  date, so its age keeps growing while the live list stays rejected. A fallback block older than 90
+  days (date in its `# provider <name> <date>` header) is still used, with a louder warning.
+- The committed snapshot only needs an occasional refresh by hand, through a pull request:
+  `python -m mbl cdn-snapshot --out allowlist-cdn.snapshot.txt`. No workflow commits to `main`.
 
 ## Uninstall
 
@@ -367,6 +370,7 @@ The [`lists`](https://github.com/Psycomy/MikroBlockList/tree/lists) branch conta
 | `routeros6-full.txt`, `routeros6-lite.txt` | IPv6 lists in the router format (`family=ipv6` in the header); only IPv6 routers download them. Not published on a day when IPv6 fails its checks |
 | `blocklist6.txt`, `blocklist6-lite.txt` | Plain IPv6 lists (`full` / `lite`), one address or CIDR per line (`/128` without mask), for other firewalls |
 | `stats.json` | Generation time, total (`full`), `variants` (total of `full` and `lite`), `ipv6` (`published` and totals per variant), `cdn_allowlist` (per provider: `source`, `prefixes4`, `prefixes6`), and per-source IPv4 `entries`, IPv6 `entries6` and errors |
+| `cdn-snapshot.txt` | The CDN ranges (Cloudflare, Fastly, CloudFront) allowlisted by that build, one `# provider <name> <date>` block each; the next build's first fallback when a live CDN list is rejected |
 | [`NOTICE.md`](https://github.com/Psycomy/MikroBlockList/blob/lists/NOTICE.md) | Attribution: every source used in that build, its URL, terms and entry count |
 | `badge-entries.json`, `badge-updated.json` | shields.io endpoints for the badges above |
 
@@ -588,6 +592,7 @@ poca RAM o si solo quieres bloquear C2 y los rangos de ataque más graves. Para 
 **Ficheros publicados:** `routeros-full.txt` y `routeros-lite.txt` (formato del router, con cabecera
 y pie), y `blocklist.txt` y `blocklist-lite.txt` (una entrada por línea, sin cabecera, para otros
 firewalls). `stats.json` añade `variants` con el total de cada variante y `cdn_allowlist`.
+`cdn-snapshot.txt` guarda los rangos de CDN restados en ese build (primer respaldo del siguiente).
 
 ### IPv6 opcional
 
@@ -658,17 +663,20 @@ en tu navegador y nada de lo que escribes se envía a ningún sitio. Si es un fa
 En cada build se descargan los rangos publicados de **Cloudflare**, **Fastly** y **CloudFront** y se
 restan (IPv4 e IPv6), además de `allowlist.txt` (ahora solo GitHub y DNS públicos). Una descarga se
 rechaza si no se puede leer, trae menos de 5 prefijos IPv4 o contiene un prefijo IPv4 más amplio que
-/8 o IPv6 más amplio que /16; entonces se usa su bloque de
-[`allowlist-cdn.snapshot.txt`](allowlist-cdn.snapshot.txt) (o se sigue sin ese proveedor, con aviso).
+/8 o IPv6 más amplio que /16; entonces se usa su bloque del `cdn-snapshot.txt` publicado ayer en la
+rama `lists` (cada build publica los bloques que usó), después el de
+[`allowlist-cdn.snapshot.txt`](allowlist-cdn.snapshot.txt) (último recurso), o se sigue sin ese
+proveedor, siempre con aviso.
 Tope, medido de dos formas sobre la lista sin allowlist: las direcciones que elimina y las entradas
 que toca (las que se solapan, entera o parcialmente, con algún rango de la allowlist). Si cualquiera
 de las dos pasa del 10 % de la lista IPv4 *full*, el build falla; en IPv6 se retiene IPv6. El error
 da las dos cifras. No hay opción para saltárselo: lo normal es que una fuente haya empezado a listar
 rangos de CDN o de nube enteros; quita o acota esa fuente en `sources.toml` y vuelve a lanzar el build
 (añadir rangos a `allowlist.txt` no sirve: cuentan en las mismas medidas). `stats.json` lo refleja en
-`cdn_allowlist` (`live`, `snapshot` o `missing`) y en `cdn_allowlist.cap` (porcentajes de direcciones
-y de entradas por familia). Un bloque de la copia con más de 90 días (fecha de su cabecera) se sigue
-usando, con un aviso para renovarlo. La copia se actualiza a mano con
+`cdn_allowlist` (`live`, `published`, `snapshot` o `missing`) y en `cdn_allowlist.cap` (porcentajes de direcciones
+y de entradas por familia). Un bloque de respaldo conserva su fecha (un bloque en vivo lleva la del
+build); con más de 90 días se sigue usando, con un aviso más fuerte. La copia del repositorio solo
+necesita renovarse de vez en cuando, a mano, con
 `python -m mbl cdn-snapshot --out allowlist-cdn.snapshot.txt`, mediante PR.
 
 ### Seguridad y reportes
