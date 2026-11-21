@@ -1,0 +1,138 @@
+{
+  "generated_at": "2026-11-21T12:35:39Z",
+  "total": 36833,
+  "variants": {
+    "full": {
+      "total": 36833
+    },
+    "lite": {
+      "total": 2582
+    }
+  },
+  "ipv6": {
+    "published": true,
+    "variants": {
+      "full": {
+        "total": 365
+      },
+      "lite": {
+        "total": 86
+      }
+    }
+  },
+  "cdn_allowlist": {
+    "cloudflare": {
+      "source": "live",
+      "prefixes4": 15,
+      "prefixes6": 7
+    },
+    "fastly": {
+      "source": "live",
+      "prefixes4": 21,
+      "prefixes6": 3
+    },
+    "cloudfront": {
+      "source": "live",
+      "prefixes4": 217,
+      "prefixes6": 35
+    },
+    "cap": {
+      "limit_pct": 10.0,
+      "ipv4": {
+        "addresses": 15079147,
+        "addresses_removed": 71,
+        "addresses_pct": 0.0,
+        "entries": 36900,
+        "entries_touched": 67,
+        "entries_pct": 0.18
+      },
+      "ipv6": {
+        "addresses": 13896574491176311226776474878242,
+        "addresses_removed": 6,
+        "addresses_pct": 0.0,
+        "entries": 371,
+        "entries_touched": 6,
+        "entries_pct": 1.62
+      }
+    }
+  },
+  "sources": {
+    "spamhaus-drop": {
+      "category": "attack",
+      "entries": 1751,
+      "entries6": 0,
+      "invalid": 0,
+      "error": null
+    },
+    "spamhaus-drop-v6": {
+      "category": "attack",
+      "entries": 0,
+      "entries6": 90,
+      "invalid": 0,
+      "error": null
+    },
+    "et-compromised": {
+      "category": "attack",
+      "entries": 596,
+      "entries6": 0,
+      "invalid": 0,
+      "error": null
+    },
+    "cins": {
+      "category": "attack",
+      "entries": 15000,
+      "entries6": 0,
+      "invalid": 0,
+      "error": null
+    },
+    "blocklist-de": {
+      "category": "attack",
+      "entries": 24220,
+      "entries6": 249,
+      "invalid": 0,
+      "error": null
+    },
+    "dshield": {
+      "category": "attack",
+      "entries": 20,
+      "entries6": 0,
+      "invalid": 0,
+      "error": null
+    },
+    "ipsum-3": {
+      "category": "attack",
+      "entries": 19549,
+      "entries6": 0,
+      "invalid": 0,
+      "error": null
+    },
+    "binarydefense": {
+      "category": "attack",
+      "entries": 467,
+      "entries6": 0,
+      "invalid": 0,
+      "error": null
+    },
+    "turris-greylist": {
+      "category": "attack",
+      "entries": 9200,
+      "entries6": 41,
+      "invalid": 0,
+      "error": null
+    },
+    "threatcluster": {
+      "category": "c2",
+      "entries": 240,
+      "entries6": 2,
+      "invalid": 0,
+      "error": null
+    },
+    "c2intel": {
+      "category": "c2",
+      "entries": 204,
+      "entries6": 0,
+      "invalid": 0,
+      "error": null
+    }
+  }
+}
